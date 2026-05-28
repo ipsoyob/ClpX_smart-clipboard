@@ -36,12 +36,41 @@ namespace Clpx
             lblInfo.Font = infoFont;
             lblInfo.Text = "💡 Нужна помощь?\n" + "Нажми F1";
             infoPanel.Controls.Add(lblInfo);
-
             tabPanel.BackColor = Color.Transparent;
 
             BuildTabButton(btnTabAll, "⚡ Всё", 0, "ALL", infoFont);
-            BuildTabButton(btnTabTxt, "📄 Текст", 130, "TXT", infoFont);
-            BuildTabButton(btnTabImg, "🖼️ Картинки", 260, "IMG", infoFont);
+            BuildTabButton(btnTabTxt, "📄 Текст", 0, "TXT", infoFont);
+            BuildTabButton(btnTabImg, "🖼 Картинки", 0, "IMG", infoFont);
+
+            Action resizeButtons = () => {
+                int totalWidth = tabPanel.Width;
+                int gap = 15; // Размер промежутка между кнопками в пикселях
+
+                // Вычисляем ширину одной кнопки с учетом двух промежутков
+                int buttonWidth = (totalWidth - (gap * 2)) / 3;
+
+                // Первой кнопке даем небольшой отступ слева, если нужно, или ставим в 0
+                btnTabAll.Width = buttonWidth;
+                btnTabAll.Left = 0;
+
+                // Вторая кнопка сдвигается на ширину первой + промежуток
+                btnTabTxt.Width = buttonWidth;
+                btnTabTxt.Left = buttonWidth + gap;
+
+                // Третья кнопка сдвигается на две ширины + два промежутка
+                btnTabImg.Width = buttonWidth;
+                btnTabImg.Left = (buttonWidth * 2) + (gap * 2);
+            };
+
+            // Подписываемся на изменение размеров панели
+            tabPanel.SizeChanged += (s, e) => resizeButtons();
+
+            // Принудительно вызываем расчет прямо сейчас, чтобы кнопки встали ровно при запуске
+            resizeButtons();
+
+
+
+            infoPanel.Controls.Add(tabPanel);
 
             infoPanel.Controls.Add(tabPanel);
 
@@ -49,28 +78,112 @@ namespace Clpx
             txtSearch.BackColor = Color.FromArgb(30, 30, 42);
             txtSearch.ForeColor = Color.White;
             txtSearch.BorderStyle = BorderStyle.FixedSingle;
-            txtSearch.Text = "🔍 Начните писать здесь для поиска...";
-            txtSearch.Enter += (s, e) => { if (txtSearch.Text == "🔍 Начните писать здесь для поиска...") txtSearch.Text = ""; };
+            txtSearch.Leave += (s, e) =>
+            {
+                isChangingLanguage = true;
+                if (string.IsNullOrWhiteSpace(txtSearch.Text))
+                {
+                    // Проверяем язык и ставим правильный плейсхолдер
+                    txtSearch.Text = (currentLanguage == "EN")
+                        ? "🔍 start typing here to search..."
+                        : "🔍 начните писать здесь для поиска...";
+                }
+                isChangingLanguage = false;
+            };
+            txtSearch.Enter += (s, e) =>
+            {
+                isChangingLanguage = true;
+                if (txtSearch.Text == "🔍 начните писать здесь для поиска..." || txtSearch.Text == "🔍 start typing here to search...")
+                {
+                    txtSearch.Text = "";
+                }
+                isChangingLanguage = false;
+            };
+
+
             txtSearch.Leave += (s, e) => { if (string.IsNullOrWhiteSpace(txtSearch.Text)) txtSearch.Text = "🔍 Начните писать здесь для поиска..."; };
             txtSearch.TextChanged += (s, e) =>
             {
                 ApplyFilters();
                 UpdateHistoryPanelVisuals(); // Фильтруем историю на лету!
             };
+
+            btnLangToggle = new Button();
+            btnLangToggle.Text = "RU";
+            btnLangToggle.Width = 40;
+            btnLangToggle.Height = 30;
+
+            btnLangToggle.Left = 480;
+            btnLangToggle.Top = 10;
+
+            // Дизайн под стиль ClpX Ultimate
+            btnLangToggle.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+            btnLangToggle.FlatStyle = FlatStyle.Flat;
+            btnLangToggle.ForeColor = Color.FromArgb(165, 180, 252);
+            btnLangToggle.BackColor = Color.FromArgb(24, 24, 35); // Тот же цвет, что у кнопок "Текст" и "Картинки"
+            btnLangToggle.FlatStyle = FlatStyle.Flat;
+            btnLangToggle.FlatAppearance.BorderSize = 0;
+            btnLangToggle.Cursor = Cursors.Hand;
+            btnLangToggle.FlatAppearance.MouseOverBackColor = Color.FromArgb(34, 34, 49);
+            btnLangToggle.FlatAppearance.MouseDownBackColor = Color.FromArgb(44, 44, 64);
+            btnLangToggle.Click += BtnLangToggle_Click;
+            btnLangToggle.TextAlign = ContentAlignment.MiddleCenter;
+            btnLangToggle.Cursor = Cursors.Hand;
+
+            // Скругляем углы кнопки языка, чтобы она стала аккуратной капсулой
+            System.Drawing.Drawing2D.GraphicsPath langBtnPath = new System.Drawing.Drawing2D.GraphicsPath();
+            int langRadius = 6; // Радиус скругления
+            langBtnPath.AddArc(0, 0, langRadius, langRadius, 180, 90);
+            langBtnPath.AddArc(btnLangToggle.Width - langRadius, 0, langRadius, langRadius, 270, 90);
+            langBtnPath.AddArc(btnLangToggle.Width - langRadius, btnLangToggle.Height - langRadius, langRadius, langRadius, 0, 90);
+            langBtnPath.AddArc(0, btnLangToggle.Height - langRadius, langRadius, langRadius, 90, 90);
+            langBtnPath.CloseAllFigures();
+            btnLangToggle.Region = new Region(langBtnPath);
+
+            infoPanel.Controls.Add(btnLangToggle);
+            btnLangToggle.BringToFront();
+
+
             infoPanel.Controls.Add(txtSearch);
+            pnlSearchHistory = new Panel();
+            pnlSearchHistory.Visible = false;
+            pnlSearchHistory.BackColor = Color.FromArgb(24, 24, 35); // Цвет как у кнопок
+            pnlSearchHistory.BorderStyle = BorderStyle.None;
+
+            // Позиционируем прямо внутри инфо-панели под поиском
+            pnlSearchHistory.Left = txtSearch.Left;
+            pnlSearchHistory.Top = txtSearch.Bottom + 1;
+            pnlSearchHistory.Width = txtSearch.Width;
+            pnlSearchHistory.Height = 0;
+
+            // ДОБАВЛЯЕМ СТРОГО В infoPanel
+            infoPanel.Controls.Add(pnlSearchHistory);
+            pnlSearchHistory.BringToFront();
 
             // Создаем полоску истории строго под поиском
             pnlSearchHistory = new Panel();
             pnlSearchHistory.Visible = false;
-            pnlSearchHistory.BackColor = Color.FromArgb(30, 30, 42); // Темный цвет в тон интерфейса
-                                                                     // Настройки позиции панели истории
-            pnlSearchHistory.Left = txtSearch.Left;
-            pnlSearchHistory.Top = txtSearch.Bottom; // Ровно под нижней границей поиска
-            pnlSearchHistory.Top = 180;
-            pnlSearchHistory.Width = txtSearch.Width;
+            pnlSearchHistory.BackColor = Color.FromArgb(24, 24, 35); // Тот же цвет, что и у кнопок
+            pnlSearchHistory.BorderStyle = BorderStyle.None; // Никаких стандартных рамок Windows
 
-            // Убираем уродливые стандартные рамки, если они появятся
+            // Позиционируем строго относительно txtSearch внутри панели
+            pnlSearchHistory.Left = txtSearch.Left;
+            pnlSearchHistory.Top = txtSearch.Bottom + 1;
+            pnlSearchHistory.Width = txtSearch.Width;
+            pnlSearchHistory.Height = 0;
             pnlSearchHistory.BorderStyle = BorderStyle.None;
+
+            pnlSearchHistory.AutoScroll = false; // Отключаем автопрокрутку
+            pnlSearchHistory.HorizontalScroll.Maximum = 0;
+            pnlSearchHistory.VerticalScroll.Maximum = 0;
+            pnlSearchHistory.VerticalScroll.Visible = false; // Скрываем вертикальный скроллбаг
+            pnlSearchHistory.HorizontalScroll.Visible = false;
+
+            // Возвращаем в контейнер инфо-панели!
+            infoPanel.Controls.Add(pnlSearchHistory);
+            pnlSearchHistory.BringToFront();
+
+
 
 
             // Привязываем нужные события
@@ -78,8 +191,7 @@ namespace Clpx
             txtSearch.Leave += txtSearch_Leave;
             txtSearch.KeyDown += txtSearch_KeyDown;
 
-            // Добавляем панель истории в infoPanel, чтобы она была в том же контейнере
-            infoPanel.Controls.Add(pnlSearchHistory);
+            this.Controls.Add(pnlSearchHistory); 
             pnlSearchHistory.BringToFront();
 
 
@@ -163,7 +275,7 @@ namespace Clpx
             lblNoResults.AutoSize = false;
             lblNoResults.Size = new Size(300, 30);
             lblNoResults.ForeColor = Color.FromArgb(140, 145, 160); // Приглушенный серый
-            lblNoResults.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
+            lblNoResults.Font = new Font("Segoe UI", 15f, FontStyle.Bold);
             lblNoResults.Text = "🔍 Ничего не найдено";
             lblNoResults.TextAlign = ContentAlignment.MiddleCenter;
             lblNoResults.Visible = false; // По умолчанию скрыта
@@ -189,7 +301,10 @@ namespace Clpx
             this.FormClosing += (s, e) => { if (s != null) Form1_FormClosing(s, e); };
             this.Load += (s, e) => Form1_Load(s, e);
 
-
+            this.Resize += (s, e) =>
+            {
+                btnLangToggle.Left = this.ClientSize.Width - btnLangToggle.Width - 65;
+            };
             UpdateListViewLayout();
         }
 

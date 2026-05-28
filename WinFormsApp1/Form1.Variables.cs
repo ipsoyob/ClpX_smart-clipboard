@@ -207,7 +207,10 @@ namespace Clpx
 
         private Panel pnlSearchHistory;
 
-
+        private Button btnLangToggle;
+        private string currentLanguage = "RU";
+        private string historyTitleText = "ИСТОРИЯ ПОИСКА";
+        private bool isChangingLanguage = false;
 
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]

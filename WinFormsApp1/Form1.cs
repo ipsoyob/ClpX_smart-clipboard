@@ -106,8 +106,11 @@ namespace Clpx
             int pnlWidth = infoPanel.ClientSize.Width;
 
             lblInfo.Location = new Point(16, 12);
-            lblInfo.Width = pnlWidth - 32;
+            lblInfo.AutoSize = false;
+            lblInfo.Width = 150;
             lblInfo.Height = 75;
+            
+
 
             tabPanel.Location = new Point(16, 95);
             tabPanel.Width = pnlWidth - 32;
@@ -131,10 +134,16 @@ namespace Clpx
 
         private void ApplyFilters()
         {
-            
-
+            if (isChangingLanguage) return;
 
             string query = txtSearch.Text.Trim().ToLower();
+
+            if (query == "🔍 начните писать здесь для поиска..." ||
+        query == "🔍 start typing here to search...")
+            {
+                query = "";
+            }
+
             if (query == "🔍 начните писать здесь для поиска...") query = "";
 
             List<ListViewItem> filtered = new List<ListViewItem>();
@@ -195,8 +204,15 @@ namespace Clpx
 
         private void ClearFullDatabase()
         {
-            var result = MessageBox.Show("Вы уверены, что хотите полностью очистить историю, удалить сохраненные скриншоты и очистить системный буфер?",
-                "Очистка базы данных", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+            bool isEn = (currentLanguage == "EN");
+
+            string msgText = isEn
+                ? "Are you sure you want to completely clear the history, delete saved screenshots, and clear the system clipboard?"
+                : "Вы уверены, что хотите полностью очистить историю, удалить сохраненные скриншоты и очистить системный буфер?";
+
+            string msgCaption = isEn ? "Database Cleanup" : "Очистка базы данных";
+
+            var result = MessageBox.Show(msgText, msgCaption, MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
 
             if (result == DialogResult.Yes)
             {
@@ -230,25 +246,33 @@ namespace Clpx
                     catch { }
                 }
 
-                if (txtSearch.Text != "🔍 Начните писать здесь для поиска...") txtSearch.Text = "🔍 Начните писать здесь для поиска...";
+                string placeholderText = isEn ? "🔍 Type here to search..." : "🔍 Начните писать здесь для поиска...";
+                if (txtSearch.Text != placeholderText) txtSearch.Text = placeholderText;
                 ApplyFilters();
 
-                statusLabel.Text = " 🗑️ База данных полностью очищена";
+                statusLabel.Text = isEn ? "🗑️ Database completely cleared" : "🗑️ База данных полностью очищена";
                 statusLabel.ForeColor = Color.FromArgb(248, 113, 113);
 
                 System.Windows.Forms.Timer clearStatusTimer = new System.Windows.Forms.Timer { Interval = 1000 };
                 clearStatusTimer.Tick += (st, evv) =>
                 {
                     clearStatusTimer.Stop();
-                    statusLabel.Text = " Ready";
+                    statusLabel.Text = isEn ? "Ready" : "Готово";
                     statusLabel.ForeColor = Color.FromArgb(160, 165, 185);
                     clearStatusTimer.Dispose();
                 };
                 clearStatusTimer.Start();
 
-                MessageBox.Show("Локальная база данных, папка media и буфер обмена успешно очищены.", "Готово", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                string successText = isEn
+                    ? "Local database, media folder, and clipboard cleared successfully."
+                    : "Локальная база данных, папка media и буфер обмена успешно очищены.";
+
+                string successCaption = isEn ? "Success" : "Готово";
+
+                MessageBox.Show(successText, successCaption, MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
+
 
         private void Form1_Load(object sender, EventArgs e)
         {
@@ -339,104 +363,109 @@ namespace Clpx
 
         private void OnClipboardChangedNotification()
         {
-            if (isInitializing) return;
-
-            lock (clipboardLock)
+            // Если программа сейчас занята переводом интерфейса, 
+            // мы полностью игнорируем любые изменения в буфере обмена!
+            if (isChangingLanguage) return;
             {
-                if (!OpenClipboard(this.Handle)) return;
+                if (isInitializing) return;
 
-                try
+                lock (clipboardLock)
                 {
-                    if (IsClipboardFormatAvailable(CF_BITMAP))
+                    if (!OpenClipboard(this.Handle)) return;
+
+                    try
                     {
-                        IntPtr hBitmap = GetClipboardData(CF_BITMAP);
-                        if (hBitmap != IntPtr.Zero)
+                        if (IsClipboardFormatAvailable(CF_BITMAP))
                         {
-                            using (Bitmap bmp = Image.FromHbitmap(hBitmap))
+                            IntPtr hBitmap = GetClipboardData(CF_BITMAP);
+                            if (hBitmap != IntPtr.Zero)
                             {
-                                if (bmp.Width == lastImgWidth && bmp.Height == lastImgHeight) return;
-
-                                if (bmp.Width != lastImgWidth || bmp.Height != lastImgHeight)
+                                using (Bitmap bmp = Image.FromHbitmap(hBitmap))
                                 {
-                                    lastImgWidth = bmp.Width;
-                                    lastImgHeight = bmp.Height;
-                                    lastText = "";
+                                    if (bmp.Width == lastImgWidth && bmp.Height == lastImgHeight) return;
 
-                                    int currentCount = ++imageCounter;
-                                    string imgId = $"Screenshot {currentCount}";
-                                    string metaInfo = $"🖼️ Скриншот ({bmp.Width}x{bmp.Height})";
-
-                                    Image thumb = CreateHighQualityScale(bmp, 48, 48);
-                                    safeThumbnails[imgId] = thumb;
-
-                                    string filename = $"Screenshot_{currentCount}.jpg";
-                                    string fullPath = Path.Combine(mediaFolderPath, filename);
-
-                                    ImageCodecInfo jpegEncoder = GetEncoder(ImageFormat.Jpeg);
-                                    if (jpegEncoder != null)
+                                    if (bmp.Width != lastImgWidth || bmp.Height != lastImgHeight)
                                     {
-                                        using (EncoderParameters encoderParams = new EncoderParameters(1))
+                                        lastImgWidth = bmp.Width;
+                                        lastImgHeight = bmp.Height;
+                                        lastText = "";
+
+                                        int currentCount = ++imageCounter;
+                                        string imgId = $"Screenshot {currentCount}";
+                                        string metaInfo = $"🖼️ Скриншот ({bmp.Width}x{bmp.Height})";
+
+                                        Image thumb = CreateHighQualityScale(bmp, 48, 48);
+                                        safeThumbnails[imgId] = thumb;
+
+                                        string filename = $"Screenshot_{currentCount}.jpg";
+                                        string fullPath = Path.Combine(mediaFolderPath, filename);
+
+                                        ImageCodecInfo jpegEncoder = GetEncoder(ImageFormat.Jpeg);
+                                        if (jpegEncoder != null)
                                         {
-                                            encoderParams.Param = new[] { new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 85L) };
-                                            bmp.Save(fullPath, jpegEncoder, encoderParams);
+                                            using (EncoderParameters encoderParams = new EncoderParameters(1))
+                                            {
+                                                encoderParams.Param = new[] { new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 85L) };
+                                                bmp.Save(fullPath, jpegEncoder, encoderParams);
+                                            }
                                         }
+
+                                        ClipboardPayload payload = new ClipboardPayload
+                                        {
+                                            Id = "IMG_" + Guid.NewGuid().ToString("N"),
+                                            Type = "IMG",
+                                            Body = imgId,
+                                            Meta = metaInfo,
+                                            Alias = ""
+                                        };
+                                        AddItemToRegistry(payload);
                                     }
-
-                                    ClipboardPayload payload = new ClipboardPayload
-                                    {
-                                        Id = "IMG_" + Guid.NewGuid().ToString("N"),
-                                        Type = "IMG",
-                                        Body = imgId,
-                                        Meta = metaInfo,
-                                        Alias = ""
-                                    };
-                                    AddItemToRegistry(payload);
                                 }
                             }
                         }
-                    }
-                    else if (IsClipboardFormatAvailable(CF_UNICODETEXT))
-                    {
-                        IntPtr hGlobal = GetClipboardData(CF_UNICODETEXT);
-                        if (hGlobal != IntPtr.Zero)
+                        else if (IsClipboardFormatAvailable(CF_UNICODETEXT))
                         {
-                            IntPtr lpString = GlobalLock(hGlobal);
-                            if (lpString != IntPtr.Zero)
+                            IntPtr hGlobal = GetClipboardData(CF_UNICODETEXT);
+                            if (hGlobal != IntPtr.Zero)
                             {
-                                string currentText = Marshal.PtrToStringUni(lpString) ?? "";
-                                GlobalUnlock(hGlobal);
-
-                                string trimmedText = currentText.Trim();
-
-                                // Если текст полностью совпадает с предыдущим скопированным — игнорируем, чтобы не плодить дубликаты
-                                if (trimmedText == lastText.Trim()) return;
-
-                                if (!string.IsNullOrEmpty(trimmedText) && trimmedText != lastText.Trim())
+                                IntPtr lpString = GlobalLock(hGlobal);
+                                if (lpString != IntPtr.Zero)
                                 {
-                                    lastText = currentText;
-                                    lastImgWidth = 0;
-                                    lastImgHeight = 0;
+                                    string currentText = Marshal.PtrToStringUni(lpString) ?? "";
+                                    GlobalUnlock(hGlobal);
 
-                                    // ИСПРАВЛЕНО: УДАЛЕНА СТРОКА RemoveAll(), которая вычищала историю базы при старте!
+                                    string trimmedText = currentText.Trim();
 
-                                    ClipboardPayload payload = new ClipboardPayload
+                                    // Если текст полностью совпадает с предыдущим скопированным — игнорируем, чтобы не плодить дубликаты
+                                    if (trimmedText == lastText.Trim()) return;
+
+                                    if (!string.IsNullOrEmpty(trimmedText) && trimmedText != lastText.Trim())
                                     {
-                                        Id = "TXT_" + Guid.NewGuid().ToString("N"),
-                                        Type = "TXT",
-                                        Body = currentText,
-                                        Meta = "",
-                                        Alias = ""
-                                    };
-                                    AddItemToRegistry(payload);
+                                        lastText = currentText;
+                                        lastImgWidth = 0;
+                                        lastImgHeight = 0;
+
+                                        // ИСПРАВЛЕНО: УДАЛЕНА СТРОКА RemoveAll(), которая вычищала историю базы при старте!
+
+                                        ClipboardPayload payload = new ClipboardPayload
+                                        {
+                                            Id = "TXT_" + Guid.NewGuid().ToString("N"),
+                                            Type = "TXT",
+                                            Body = currentText,
+                                            Meta = "",
+                                            Alias = ""
+                                        };
+                                        AddItemToRegistry(payload);
+                                    }
                                 }
                             }
                         }
                     }
-                }
-                catch { }
-                finally
-                {
-                    CloseClipboard();
+                    catch { }
+                    finally
+                    {
+                        CloseClipboard();
+                    }
                 }
             }
         }
@@ -1293,9 +1322,12 @@ namespace Clpx
 
         private void ShowHelpDialog()
         {
-            // 1. Инициализация и базовая кастомизация тёмной формы
+            // Проверяем выбранный язык программы (true, если выбран английский)
+            bool isEn = (currentLanguage == "EN");
+
+            // // 1. Инициализация и базовая кастомизация тёмной формы
             Form helpForm = new Form();
-            helpForm.Text = "Справка по использованию ClpX Ultimate";
+            helpForm.Text = isEn ? "ClipX Ultimate User Manual" : "Справка по использованию ClpX Ultimate";
             helpForm.ClientSize = new Size(520, 520);
             helpForm.StartPosition = FormStartPosition.CenterParent;
             helpForm.FormBorderStyle = FormBorderStyle.None; // Полностью убирает верхнюю белую полосу (заголовок)
@@ -1305,34 +1337,30 @@ namespace Clpx
             helpForm.ForeColor = Color.FromArgb(243, 244, 246);
             helpForm.TopMost = true;
 
-            // ==========================================
-            // БЛОКИРОВКА ПЕРЕТАСКИВАНИЯ (WndProc через NativeWindow)
-            // ==========================================
+            // // БЛОКИРОВКА ПЕРЕТАСКИВАНИЯ (WndProc через NativeWindow)
             var dragBlocker = new DragBlockerNativeWindow();
             helpForm.HandleCreated += (s, e) => dragBlocker.AssignHandle(helpForm.Handle);
             helpForm.HandleDestroyed += (s, e) => dragBlocker.ReleaseHandle();
 
-            // Включаем поддержку закрытия окна по кнопкам F1 и Escape
+            // // Включаем поддержку закрытия окна по кнопкам F1 и Escape
             helpForm.KeyPreview = true;
             helpForm.KeyDown += (s, e) => { if (e.KeyCode == Keys.F1 || e.KeyCode == Keys.Escape) helpForm.Close(); };
 
-            // Стилизация шрифтов и палитры
+            // // Стилизация шрифтов и палитры
             Font fontTitle = new Font("Segoe UI", 11F, FontStyle.Bold);
             Font fontSection = new Font("Segoe UI", 10F, FontStyle.Bold);
             Font fontText = new Font("Segoe UI", 9.5F, FontStyle.Regular);
             Font fontKbd = new Font("Consolas", 9F, FontStyle.Bold);
 
             Color colorGrayText = Color.FromArgb(168, 165, 185);
-            Color colorAccent = Color.FromArgb(0, 230, 118);
+            Color colorAccent = Color.FromArgb(0, 238, 118);
 
             int currentY = 24;
 
-            // ==========================================
-            // 2. ШАПКА ОКНА
-            // ==========================================
+            // // 2. ШАПКА ОКНА
             Label lblHeader = new Label
             {
-                Text = "⚡ МЕНЕДЖЕР БУФЕРА ОБМЕНА ClpX Ultimate v5.0",
+                Text = isEn ? "⚡ CLIPBOARD MANAGER ClipX Ultimate v5.0" : "⚡ МЕНЕДЖЕР БУФЕРА ОБМЕНА ClpX Ultimate v5.0",
                 Font = fontTitle,
                 ForeColor = colorGrayText,
                 Location = new Point(24, currentY),
@@ -1342,12 +1370,10 @@ namespace Clpx
 
             currentY += 44;
 
-            // ==========================================
-            // 3. БЛОК: ГОРЯЧИЕ КЛАВИШИ
-            // ==========================================
+            // // 3. БЛОК: ГОРЯЧИЕ КЛАВИШИ
             Label lblSecHotkeys = new Label
             {
-                Text = "⌨️ Горячие клавиши управления",
+                Text = isEn ? "⌨️ Control Hotkeys" : "⌨️ Горячие клавиши управления",
                 Font = fontSection,
                 ForeColor = Color.White,
                 Location = new Point(24, currentY),
@@ -1357,12 +1383,19 @@ namespace Clpx
 
             currentY += 25;
 
-            string[,] hotkeysData = new string[,] {
+            // Двумерный массив с данными локализации горячих клавиш
+            string[,] hotkeysData = isEn ? new string[,] {
+        { "Alt + X", "Quick show / hide main window" },
+        { "Alt + A", "Check developer copyright" },
+        { "F1", "Show this help window" },
+        { "Delete", "Permanently delete selected card" },
+        { "P", "Preview screenshot" }
+    } : new string[,] {
         { "Alt + X", "Быстрый вызов / скрытие главного окна" },
         { "Alt + A", "Проверка авторских прав разработчика" },
         { "F1", "Вызов данного окна справки" },
-        { "Delete", "Безвозвратное удаление выбранной карточки"},
-        { "P", "Предпросмотр скриншота" },
+        { "Delete", "Безвозвратное удаление выбранной карточки" },
+        { "P", "Предпросмотр скриншота" }
     };
 
             for (int i = 0; i < hotkeysData.GetLength(0); i++)
@@ -1392,6 +1425,7 @@ namespace Clpx
                     TextAlign = ContentAlignment.MiddleCenter,
                     Dock = DockStyle.Fill
                 };
+
                 pnlKbd.Controls.Add(lblKeys);
                 helpForm.Controls.Add(pnlKbd);
 
@@ -1410,12 +1444,10 @@ namespace Clpx
 
             currentY += 12;
 
-            // ==========================================
-            // 4. БЛОК: ИНТЕРФЕЙС И UX
-            // ==========================================
+            // // 4. БЛОК: ИНТЕРФЕЙС И UX
             Label lblSecUi = new Label
             {
-                Text = "🔬 Интерфейс и UX",
+                Text = isEn ? "✍️ Interface and UX" : "✍️ Интерфейс и UX",
                 Font = fontSection,
                 ForeColor = Color.White,
                 Location = new Point(24, currentY),
@@ -1425,7 +1457,12 @@ namespace Clpx
 
             currentY += 28;
 
-            string[] uiData = new string[] {
+            // Массив строк для описания интерфейса
+            string[] uiData = isEn ? new string[] {
+        "Double-click card — instant return of data to clipboard.",
+        "Right-click (RMB) — context menu (Rename / Delete).",
+        "Tabs at the top — history filtering (All / Text / Images)."
+    } : new string[] {
         "Двойной клик по карточке — мгновенный возврат данных в буфер.",
         "Правый клик (ПКМ) — контекстное меню (Переименовать / Удалить).",
         "Вкладки вверху — фильтрация истории (Все / Текст / Изображения)."
@@ -1458,51 +1495,39 @@ namespace Clpx
 
             currentY += 12;
 
-            // ==========================================
-            // 5. ИНФО-БЛОК (ПЛАШКА С ЛАМПОЧКОЙ)
-            // ==========================================
+            // // 5. НИЖНЯЯ ПЛАНКА С ИНФОРМАЦИЕЙ
             Panel pnlInfo = new Panel
             {
                 Location = new Point(24, currentY),
                 Size = new Size(472, 54),
-                BackColor = Color.FromArgb(32, 32, 36)
+                BackColor = Color.FromArgb(32, 32, 38)
             };
 
             pnlInfo.Paint += (s, e) =>
             {
-                using (Pen p = new Pen(colorAccent, 4))
+                using (Pen p = new Pen(colorAccent, 2))
                 {
                     e.Graphics.DrawLine(p, 0, 0, 0, pnlInfo.Height);
                 }
             };
 
-            Label lblInfoIcon = new Label
-            {
-                Text = "💡",
-                Font = new Font("Segoe UI", 12F),
-                Location = new Point(12, 16),
-                Size = new Size(25, 25)
-            };
-            pnlInfo.Controls.Add(lblInfoIcon);
-
             Label lblInfoText = new Label
             {
-                Text = "Программа работает в асинхронном режиме на частоте 144Hz+ без блокировок UI.",
-                Font = new Font("Segoe UI", 8.5F),
-                ForeColor = Color.FromArgb(141, 141, 153),
-                Location = new Point(42, 11),
-                Size = new Size(420, 35),
-                FlatStyle = FlatStyle.System
+                Text = isEn
+                    ? "The program runs asynchronously at 144Hz+ with no UI blocking."
+                    : "Программа работает в асинхронном режиме на частоте 144Hz+ без блокировок UI.",
+                Font = new Font("Segoe UI", 9F, FontStyle.Regular),
+                ForeColor = colorGrayText,
+                Location = new Point(16, 12),
+                Size = new Size(440, 32)
             };
             pnlInfo.Controls.Add(lblInfoText);
             helpForm.Controls.Add(pnlInfo);
 
-            // ==========================================
-            // 6. КНОПКА ЗАКРЫТИЯ (ОК)
-            // ==========================================
+            // // 6. КНОПКА ЗАКРЫТИЯ (ОК)
             Button btnOk = new Button
             {
-                Text = "Отлично",
+                Text = isEn ? "Excellent" : "Отлично",
                 Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
                 Size = new Size(110, 36),
                 Location = new Point(386, helpForm.ClientSize.Height - 60),
@@ -1523,8 +1548,9 @@ namespace Clpx
             helpForm.ShowDialog();
         }
 
+
         // Вспомогательный класс для перехвата сообщений динамической формы.
-        // Разместите его внутри вашего основного класса (рядом с методом ShowHelpDialog)
+
         private class DragBlockerNativeWindow : NativeWindow
         {
             private const int WM_NCHITTEST = 0x84;
@@ -1545,10 +1571,14 @@ namespace Clpx
             // При клике принудительно перерисовываем и показываем всю историю
             UpdateHistoryPanelVisuals();
         }
-
-        private void txtSearch_Leave(object sender, EventArgs e)
+        private async void txtSearch_Leave(object sender, EventArgs e)
         {
-            // ПОЛНОСТЬЮ ОЧИСТИ ЭТОТ МЕТОД (удали код внутри), чтобы он ничего не скрывал автоматически!
+            
+            await Task.Delay(100);
+
+            pnlSearchHistory.Visible = false;
+            infoPanel.Height = 220; // Возвращаем стандартную высоту плашки
+            ApplyFilters();
         }
 
         private void txtSearch_KeyDown(object sender, KeyEventArgs e)
@@ -1560,6 +1590,8 @@ namespace Clpx
                 {
                     AddToSearchHistory(query);
                 }
+
+                // Подавляем звуковой сигнал Windows при нажатии Enter
                 e.SuppressKeyPress = true;
             }
         }
@@ -1582,64 +1614,182 @@ namespace Clpx
         }
         private void UpdateHistoryPanelVisuals()
         {
-            // Очищаем старые кнопки
+            if (isChangingLanguage) return;
             pnlSearchHistory.Controls.Clear();
-
-            // Фильтруем историю: показываем только то, что начинается с текущего ввода (если пользователь уже что-то пишет)
-            string currentText = txtSearch.Text.Trim().ToLower();
-            if (currentText == "🔍 начните писать здесь для поиска...") currentText = "";
-
+            lblNoResults.Visible = false;
             var filteredHistory = searchHistory;
-            if (!string.IsNullOrEmpty(currentText))
-            {
-                filteredHistory = searchHistory.Where(h => h.StartsWith(currentText)).ToList();
-            }
-            // ЕСЛИ ПОДХОДЯЩИХ ВАРИАНТОВ НЕТ — скрываем плашку и выходим
+
             if (filteredHistory.Count == 0)
             {
                 pnlSearchHistory.Visible = false;
+                infoPanel.Height = 220; // Возвращаем стандартную высоту, если история пуста
                 return;
             }
-            // Идеально подгоняем размеры и позицию под РЕАЛЬНЫЙ размер txtSearch прямо сейчас
             pnlSearchHistory.Left = txtSearch.Left;
+            pnlSearchHistory.Top = txtSearch.Bottom + 1;
             pnlSearchHistory.Width = txtSearch.Width;
-            pnlSearchHistory.Top = txtSearch.Bottom; // Теперь это сработает, так как элемент уже на форме
-
+            
             int topOffset = 0;
+            pnlSearchHistory.Height = topOffset + 16;
+
+            Label lblHistoryTitle = new Label();
+            lblHistoryTitle.Text = "ИСТОРИЯ ПОИСКА";
+            lblHistoryTitle.Width = pnlSearchHistory.Width - 16;
+            lblHistoryTitle.Height = 18;
+            lblHistoryTitle.Left = 12; // Небольшой отступ слева вровень с иконками
+            lblHistoryTitle.Top = topOffset + 6;
+
+            // Стильный приглушенный шрифт (Caps, мелкий, серый цвет)
+            lblHistoryTitle.Font = new Font("Segoe UI", 8F, FontStyle.Bold);
+            lblHistoryTitle.ForeColor = Color.FromArgb(107, 114, 128); // Спокойный серый цвет, чтобы не отвлекал
+            lblHistoryTitle.BackColor = Color.Transparent;
+
+            pnlSearchHistory.Controls.Add(lblHistoryTitle);
+
+            // Сдвигаем начальную позицию для кнопок чуть ниже, чтобы они не наезжали на текст
+            topOffset += 24;
 
             foreach (string historyQuery in filteredHistory)
             {
                 Button btnHistoryItem = new Button();
-                btnHistoryItem.Text = "  🕒  " + historyQuery;
-                btnHistoryItem.Width = pnlSearchHistory.Width;
-                btnHistoryItem.Height = 28;
-                btnHistoryItem.Left = 0;
-                btnHistoryItem.Top = topOffset;
+                btnHistoryItem.Text = "   🕒    " + historyQuery;
 
+                // Делаем кнопки чуть уже панели (минус 16 пикселей), создавая красивый отступ по бокам
+                btnHistoryItem.Width = pnlSearchHistory.Width - 16;
+                btnHistoryItem.Height = 34; // Оптимальная высота для текста
+                btnHistoryItem.Left = 8;    // Центрируем кнопку внутри панели (отступ 8 пикселей слева)
+                btnHistoryItem.Top = topOffset + 6; // Отступ 6 пикселей сверху между кнопками
+
+                // Шрифты и стилистика в тон ClpX Ultimate
+                btnHistoryItem.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
                 btnHistoryItem.FlatStyle = FlatStyle.Flat;
-                btnHistoryItem.ForeColor = Color.FromArgb(165, 180, 252);
-                btnHistoryItem.BackColor = Color.FromArgb(30, 30, 42); // Цвет как у поля поиска
+                btnHistoryItem.ForeColor = Color.FromArgb(165, 180, 252); // Синеватый оттенок
+
+                // Делаем кнопки чуть светлее подложки, чтобы они "объёмно" выделялись
+                btnHistoryItem.BackColor = Color.FromArgb(32, 32, 45);
                 btnHistoryItem.FlatAppearance.BorderSize = 0;
-                btnHistoryItem.FlatAppearance.MouseOverBackColor = Color.FromArgb(45, 45, 58);
+
+                // Мягкий Hover при наведении курсора
+                btnHistoryItem.FlatAppearance.MouseOverBackColor = Color.FromArgb(43, 43, 60);
+                btnHistoryItem.FlatAppearance.MouseDownBackColor = Color.FromArgb(50, 50, 72);
+
                 btnHistoryItem.TextAlign = ContentAlignment.MiddleLeft;
                 btnHistoryItem.Cursor = Cursors.Hand;
 
                 btnHistoryItem.Click += (s, e) =>
                 {
+                    if (txtSearch.Text == "🔍 начните писать здесь для поиска...") txtSearch.Text = "";
                     txtSearch.Text = historyQuery;
                     pnlSearchHistory.Visible = false;
+                    infoPanel.Height = 220;
                     ApplyFilters();
                 };
-
+                // Включаем скругление углов для кнопки через создание круглого региона
+                System.Drawing.Drawing2D.GraphicsPath btnPath = new System.Drawing.Drawing2D.GraphicsPath();
+                int btnRadius = 18; // Радиус скругления плашек
+                btnPath.AddArc(0, 0, btnRadius, btnRadius, 180, 90);
+                btnPath.AddArc(btnHistoryItem.Width - btnRadius, 0, btnRadius, btnRadius, 270, 90);
+                btnPath.AddArc(btnHistoryItem.Width - btnRadius, btnHistoryItem.Height - btnRadius, btnRadius, btnRadius, 0, 90);
+                btnPath.AddArc(0, btnHistoryItem.Height - btnRadius, btnRadius, btnRadius, 90, 90);
+                btnPath.CloseAllFigures();
+                btnHistoryItem.Region = new Region(btnPath);
                 pnlSearchHistory.Controls.Add(btnHistoryItem);
-                topOffset += 28;
+
+                // Смещаем координату для следующей кнопки с учетом красивого зазора
+                topOffset += 38;
+
             }
 
-            // Устанавливаем точную высоту панели по кнопкам
-            pnlSearchHistory.Height = topOffset;
+            // Задаем высоту плашке истории
+            
+
+            // РАСШИРЯЕМ ИНФО-ПАНЕЛЬ, чтобы история не обрезалась снизу
+            infoPanel.Height = 220 + pnlSearchHistory.Height;
+
+            // Учитываем нижний отступ для всей панели, чтобы последняя кнопка не прижималась к краю
+            pnlSearchHistory.Height = topOffset + 10;
+
+            // Жестко отключаем скролл перед показом
+            pnlSearchHistory.AutoScroll = false;
             pnlSearchHistory.Visible = true;
             pnlSearchHistory.BringToFront();
         }
 
+        private void BtnLangToggle_Click(object sender, EventArgs e)
+        {
+            // Если язык уже меняется, игнорируем повторные клики
+            if (isChangingLanguage) return;
+
+            // Включаем режим защиты
+            isChangingLanguage = true;
+
+            Button clickedButton = (Button)sender;
+            if (currentLanguage == "RU")
+            {
+                currentLanguage = "EN";
+                clickedButton.Text = "EN";
+            }
+            else
+            {
+                currentLanguage = "RU";
+                clickedButton.Text = "RU";
+            }
+
+            if (currentLanguage == "EN")
+            {
+                historyTitleText = "SEARCH HISTORY";
+                lblInfo.Text = "Need help? (EN)\nPress F1";
+
+                if (txtSearch.Text == "🔍 начните писать здесь для поиска...")
+                    txtSearch.Text = "🔍 start typing here to search...";
+                if (lblNoResults.Text == "ничего не найдено")
+                    lblNoResults.Text = "nothing found";
+            }
+            else
+            {
+                historyTitleText = "ИСТОРИЯ ПОИСКА";
+                lblInfo.Text = "Нужна помощь? (RU)\nНажми F1";
+
+                if (txtSearch.Text == "🔍 start typing here to search...")
+                    txtSearch.Text = "🔍 начните писать здесь для поиска...";
+                if (lblNoResults.Text == "nothing found")
+                    lblNoResults.Text = "ничего не найдено";
+            }
+
+            // Переводим кнопки
+            TranslateControls(this);
+
+            // Выключаем режим защиты
+            isChangingLanguage = false;
+        }
+
+
+        private void TranslateControls(Control parent)
+        {
+            foreach (Control c in parent.Controls)
+            {
+                if (currentLanguage == "EN")
+                {
+                    if (c.Text == "⚡ Всё") c.Text = "⚡ All";
+                    else if (c.Text == "📄 Текст") c.Text = "📄 Text";
+                    else if (c.Text == "🖼️ Картинки") c.Text = "🖼️ Images";
+                    else if (c.Text == "🗑️ Стереть всё") c.Text = "🗑️ Clear all";
+                    else if (c.Text.Contains("Нужна помощь?")) c.Text = "Need help?\nPress F1";
+                }
+                else
+                {
+                    if (c.Text == "⚡ All") c.Text = "⚡ Всё";
+                    else if (c.Text == "📄 Text") c.Text = "📄 Текст";
+                    else if (c.Text == "🖼️ Images") c.Text = "🖼️ Картинки";
+                    else if (c.Text == "🗑️ Clear all") c.Text = "🗑️ Стереть всё";
+                    else if (c.Text.Contains("Need help?")) c.Text = "Нужна помощь?\nНажми F1";
+                }
+
+                // Если у элемента есть под-элементы (как у infoPanel), переводим и их
+                if (c.HasChildren) TranslateControls(c);
+            }
+        }
+
     }
+
 }
