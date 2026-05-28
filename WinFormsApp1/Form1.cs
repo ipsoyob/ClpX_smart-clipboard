@@ -245,7 +245,7 @@ namespace Clpx
                     catch { }
                 }
 
-                string placeholderText = isEn ? "🔍 Type here to search..." : "🔍 Начните писать здесь для поиска...";
+                string placeholderText = isEn ? "🔍 start typing here to search..." : "🔍 начните писать здесь для поиска...";
                 if (txtSearch.Text != placeholderText) txtSearch.Text = placeholderText;
                 ApplyFilters();
 
