@@ -80,7 +80,6 @@ namespace Clpx
             }
         }
 
-
         private void UpdateListViewLayout()
         {
             if (lblNoResults != null && listClipboard != null)
