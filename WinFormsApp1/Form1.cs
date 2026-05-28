@@ -37,7 +37,7 @@ namespace Clpx
                     {
                         listClipboard.BeginInvoke(new Action(() =>
                         {
-                            statusLabel.Text = " Ready";
+                            statusLabel.Text = (currentLanguage == "EN") ? "Ready" : "Готов";
                             statusLabel.ForeColor = Color.FromArgb(160, 165, 185);
                             listClipboard.Invalidate();
                         }));
@@ -704,7 +704,7 @@ namespace Clpx
             string itemUid = lvi.ImageKey;
 
             animatedKeyId = itemUid;
-            statusLabel.Text = " ✓ Скопировано в буфер обмена!";
+            statusLabel.Text = (currentLanguage == "EN") ? "  Copied to clipboard!" : "  Скопировано в буфер обмена!";
             statusLabel.ForeColor = Color.FromArgb(52, 211, 153);
 
             StopHighHzTimer();
@@ -740,7 +740,7 @@ namespace Clpx
                 }
                 catch
                 {
-                    statusLabel.Text = " ❌ Ошибка копирования";
+                    statusLabel.Text = (currentLanguage == "EN") ? "  Copy error" : "  Ошибка копирования";
                     statusLabel.ForeColor = Color.FromArgb(239, 68, 68);
                 }
             }
@@ -1633,7 +1633,7 @@ namespace Clpx
             pnlSearchHistory.Height = topOffset + 16;
 
             Label lblHistoryTitle = new Label();
-            lblHistoryTitle.Text = "ИСТОРИЯ ПОИСКА";
+            lblHistoryTitle.Text = (currentLanguage == "EN") ? "SEARCH HISTORY" : "ИСТОРИЯ ПОИСКА";
             lblHistoryTitle.Width = pnlSearchHistory.Width - 16;
             lblHistoryTitle.Height = 18;
             lblHistoryTitle.Left = 12; // Небольшой отступ слева вровень с иконками
@@ -1758,6 +1758,7 @@ namespace Clpx
 
             // Переводим кнопки
             TranslateControls(this);
+            lblNoResults.Text = (currentLanguage == "EN") ? "🔍 Nothing found" : "🔍 Ничего не найдено";
 
             // Выключаем режим защиты
             isChangingLanguage = false;

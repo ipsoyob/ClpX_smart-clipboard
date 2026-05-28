@@ -237,7 +237,7 @@ namespace Clpx
             statusStrip.RenderMode = ToolStripRenderMode.System;
             statusLabel.ForeColor = Color.FromArgb(140, 145, 160);
             statusLabel.Font = statusFont;
-            statusLabel.Text = " Программа работает и запоминает ваш буфер";
+            statusLabel.Text = (currentLanguage == "EN") ? "The program runs and remembers your buffer." : " Программа работает и запоминает ваш буфер";
             statusStrip.Items.Add(statusLabel);
             this.Controls.Add(statusStrip);
 
@@ -276,7 +276,7 @@ namespace Clpx
             lblNoResults.Size = new Size(300, 30);
             lblNoResults.ForeColor = Color.FromArgb(140, 145, 160); // Приглушенный серый
             lblNoResults.Font = new Font("Segoe UI", 15f, FontStyle.Bold);
-            lblNoResults.Text = "🔍 Ничего не найдено";
+            lblNoResults.Text = (currentLanguage == "EN") ? "🔍 Nothing found" : "🔍 Ничего не найдено";
             lblNoResults.TextAlign = ContentAlignment.MiddleCenter;
             lblNoResults.Visible = false; // По умолчанию скрыта
 
