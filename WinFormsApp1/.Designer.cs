@@ -1,4 +1,4 @@
-﻿namespace ManagerBuffer0
+﻿namespace Clpx
 {
     partial class Form1
     {

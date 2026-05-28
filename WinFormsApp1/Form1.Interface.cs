@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace ManagerBuffer0
+namespace Clpx
 {
     public partial class Form1 : Form
     {
@@ -34,8 +34,7 @@ namespace ManagerBuffer0
             lblInfo.AutoSize = false;
             lblInfo.ForeColor = Color.FromArgb(165, 180, 252);
             lblInfo.Font = infoFont;
-            lblInfo.Text = "💡 Нужна помощь?\n" +
-                "Нажми F1";
+            lblInfo.Text = "💡 Нужна помощь?\n" + "Нажми F1";
             infoPanel.Controls.Add(lblInfo);
 
             tabPanel.BackColor = Color.Transparent;
@@ -53,8 +52,36 @@ namespace ManagerBuffer0
             txtSearch.Text = "🔍 Начните писать здесь для поиска...";
             txtSearch.Enter += (s, e) => { if (txtSearch.Text == "🔍 Начните писать здесь для поиска...") txtSearch.Text = ""; };
             txtSearch.Leave += (s, e) => { if (string.IsNullOrWhiteSpace(txtSearch.Text)) txtSearch.Text = "🔍 Начните писать здесь для поиска..."; };
-            txtSearch.TextChanged += (s, e) => ApplyFilters();
+            txtSearch.TextChanged += (s, e) =>
+            {
+                ApplyFilters();
+                UpdateHistoryPanelVisuals(); // Фильтруем историю на лету!
+            };
             infoPanel.Controls.Add(txtSearch);
+
+            // Создаем полоску истории строго под поиском
+            pnlSearchHistory = new Panel();
+            pnlSearchHistory.Visible = false;
+            pnlSearchHistory.BackColor = Color.FromArgb(30, 30, 42); // Темный цвет в тон интерфейса
+                                                                     // Настройки позиции панели истории
+            pnlSearchHistory.Left = txtSearch.Left;
+            pnlSearchHistory.Top = txtSearch.Bottom; // Ровно под нижней границей поиска
+            pnlSearchHistory.Top = 180;
+            pnlSearchHistory.Width = txtSearch.Width;
+
+            // Убираем уродливые стандартные рамки, если они появятся
+            pnlSearchHistory.BorderStyle = BorderStyle.None;
+
+
+            // Привязываем нужные события
+            txtSearch.Click += txtSearch_Click;
+            txtSearch.Leave += txtSearch_Leave;
+            txtSearch.KeyDown += txtSearch_KeyDown;
+
+            // Добавляем панель истории в infoPanel, чтобы она была в том же контейнере
+            infoPanel.Controls.Add(pnlSearchHistory);
+            pnlSearchHistory.BringToFront();
+
 
             btnClearDb.Text = "🗑️ Стереть всё";
             btnClearDb.FlatStyle = FlatStyle.Flat;

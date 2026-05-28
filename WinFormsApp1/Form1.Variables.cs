@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace ManagerBuffer0
+namespace Clpx
 {
     public partial class Form1 : Form
     {
@@ -56,7 +56,6 @@ namespace ManagerBuffer0
 
 
         private readonly Label lblNoResults = new Label();
-
 
 
         private readonly object clipboardLock = new object();
@@ -204,10 +203,10 @@ namespace ManagerBuffer0
         public const int SB_LINEUP = 0;
         public const int SB_THUMBPOSITION = 4;
 
-        // Переменные для идеальной кинетической прокрутки карточек
-        public int targetScrollTop = 0;   // Куда колесико приказало прикрутить
-        public float currentScrollTop = 0f; // Где карточки находятся прямо сейчас (плавно плывут)
-        public float scrollVelocityY = 0f;  // Скорость инерции для эффекта масляного заноса
+        private List<string> searchHistory = new List<string>();
+
+        private Panel pnlSearchHistory;
+
 
 
 

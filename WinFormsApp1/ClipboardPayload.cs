@@ -1,6 +1,6 @@
 using System;
 
-namespace ManagerBuffer0
+namespace Clpx
 {
     public class ClipboardPayload
     {

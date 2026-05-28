@@ -10,7 +10,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace ManagerBuffer0
+namespace Clpx
 {
     public partial class Form1 : Form
     {
@@ -668,6 +668,7 @@ namespace ManagerBuffer0
 
         private void ListClipboard_DoubleClick(object sender, EventArgs e)
         {
+            pnlSearchHistory.Visible = false;
             if (listClipboard.SelectedItems.Count == 0) return;
             ListViewItem lvi = listClipboard.SelectedItems[0];
             string keyId = lvi.Text;
@@ -1538,6 +1539,106 @@ namespace ManagerBuffer0
                 }
                 base.WndProc(ref m);
             }
+        }
+        private void txtSearch_Click(object sender, EventArgs e)
+        {
+            // При клике принудительно перерисовываем и показываем всю историю
+            UpdateHistoryPanelVisuals();
+        }
+
+        private void txtSearch_Leave(object sender, EventArgs e)
+        {
+            // ПОЛНОСТЬЮ ОЧИСТИ ЭТОТ МЕТОД (удали код внутри), чтобы он ничего не скрывал автоматически!
+        }
+
+        private void txtSearch_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                string query = txtSearch.Text.Trim().ToLower();
+                if (query != "🔍 начните писать здесь для поиска..." && !string.IsNullOrEmpty(query))
+                {
+                    AddToSearchHistory(query);
+                }
+                e.SuppressKeyPress = true;
+            }
+        }
+
+        private void AddToSearchHistory(string query)
+        {
+            if (string.IsNullOrWhiteSpace(query)) return;
+
+            if (searchHistory.Contains(query))
+            {
+                searchHistory.Remove(query);
+            }
+
+            searchHistory.Insert(0, query);
+
+            if (searchHistory.Count > 5)
+            {
+                searchHistory.RemoveAt(searchHistory.Count - 1);
+            }
+        }
+        private void UpdateHistoryPanelVisuals()
+        {
+            // Очищаем старые кнопки
+            pnlSearchHistory.Controls.Clear();
+
+            // Фильтруем историю: показываем только то, что начинается с текущего ввода (если пользователь уже что-то пишет)
+            string currentText = txtSearch.Text.Trim().ToLower();
+            if (currentText == "🔍 начните писать здесь для поиска...") currentText = "";
+
+            var filteredHistory = searchHistory;
+            if (!string.IsNullOrEmpty(currentText))
+            {
+                filteredHistory = searchHistory.Where(h => h.StartsWith(currentText)).ToList();
+            }
+            // ЕСЛИ ПОДХОДЯЩИХ ВАРИАНТОВ НЕТ — скрываем плашку и выходим
+            if (filteredHistory.Count == 0)
+            {
+                pnlSearchHistory.Visible = false;
+                return;
+            }
+            // Идеально подгоняем размеры и позицию под РЕАЛЬНЫЙ размер txtSearch прямо сейчас
+            pnlSearchHistory.Left = txtSearch.Left;
+            pnlSearchHistory.Width = txtSearch.Width;
+            pnlSearchHistory.Top = txtSearch.Bottom; // Теперь это сработает, так как элемент уже на форме
+
+            int topOffset = 0;
+
+            foreach (string historyQuery in filteredHistory)
+            {
+                Button btnHistoryItem = new Button();
+                btnHistoryItem.Text = "  🕒  " + historyQuery;
+                btnHistoryItem.Width = pnlSearchHistory.Width;
+                btnHistoryItem.Height = 28;
+                btnHistoryItem.Left = 0;
+                btnHistoryItem.Top = topOffset;
+
+                btnHistoryItem.FlatStyle = FlatStyle.Flat;
+                btnHistoryItem.ForeColor = Color.FromArgb(165, 180, 252);
+                btnHistoryItem.BackColor = Color.FromArgb(30, 30, 42); // Цвет как у поля поиска
+                btnHistoryItem.FlatAppearance.BorderSize = 0;
+                btnHistoryItem.FlatAppearance.MouseOverBackColor = Color.FromArgb(45, 45, 58);
+                btnHistoryItem.TextAlign = ContentAlignment.MiddleLeft;
+                btnHistoryItem.Cursor = Cursors.Hand;
+
+                btnHistoryItem.Click += (s, e) =>
+                {
+                    txtSearch.Text = historyQuery;
+                    pnlSearchHistory.Visible = false;
+                    ApplyFilters();
+                };
+
+                pnlSearchHistory.Controls.Add(btnHistoryItem);
+                topOffset += 28;
+            }
+
+            // Устанавливаем точную высоту панели по кнопкам
+            pnlSearchHistory.Height = topOffset;
+            pnlSearchHistory.Visible = true;
+            pnlSearchHistory.BringToFront();
         }
 
     }
