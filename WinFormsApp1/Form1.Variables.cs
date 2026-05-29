@@ -128,6 +128,10 @@ namespace Clpx
 
         private const int WM_HELP = 0x0053;
 
+        private int lastSavedWidth = 0;
+        private int lastSavedHeight = 0;
+        private static DateTime lastSavedTime = DateTime.MinValue;
+
 
         private const uint CF_BITMAP = 2;
         private const uint CF_UNICODETEXT = 13;
@@ -153,14 +157,14 @@ namespace Clpx
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         public static extern bool ShowWindow(System.IntPtr hWnd, int nCmdShow);
-       
 
+        private bool isProcessingClipboard = false;
 
         [System.Runtime.InteropServices.DllImport("kernel32.dll")]
         public static extern uint GetCurrentThreadId();
 
 
-
+        private DateTime lastScreenshotTime = DateTime.MinValue;
 
         private IntPtr nextClipboardViewer;
 

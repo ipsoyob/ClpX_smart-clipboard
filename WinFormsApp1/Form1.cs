@@ -110,7 +110,6 @@ namespace Clpx
             lblInfo.Height = 75;
             
 
-
             tabPanel.Location = new Point(16, 95);
             tabPanel.Width = pnlWidth - 32;
             tabPanel.Height = 32;
@@ -362,112 +361,131 @@ namespace Clpx
 
         private void OnClipboardChangedNotification()
         {
-            // Если программа сейчас занята переводом интерфейса, 
-            // мы полностью игнорируем любые изменения в буфере обмена!
             if (isChangingLanguage) return;
+            if (isInitializing) return;
+            if (isProcessingClipboard) return;
+
+            lock (clipboardLock)
             {
-                if (isInitializing) return;
+                if (!OpenClipboard(this.Handle)) return;
 
-                lock (clipboardLock)
+                try
                 {
-                    if (!OpenClipboard(this.Handle)) return;
+                    isProcessingClipboard = true;
 
-                    try
+                    // --- БЛОК ОБРАБОТКИ КАРТИНКИ ---
+                    if (IsClipboardFormatAvailable(CF_BITMAP))
                     {
-                        if (IsClipboardFormatAvailable(CF_BITMAP))
+                        IntPtr hBitmap = GetClipboardData(CF_BITMAP);
+                        if (hBitmap != IntPtr.Zero)
                         {
-                            IntPtr hBitmap = GetClipboardData(CF_BITMAP);
-                            if (hBitmap != IntPtr.Zero)
+                            using (Bitmap bmp = Image.FromHbitmap(hBitmap))
                             {
-                                using (Bitmap bmp = Image.FromHbitmap(hBitmap))
+                                int currentCount = ++imageCounter;
+                                string imgId = $"Screenshot {currentCount}";
+                                string metaInfo = $"📷 Скриншот ({bmp.Width}x{bmp.Height})";
+
+                                Image thumb = CreateHighQualityScale(bmp, 48, 48);
+                                safeThumbnails[imgId] = thumb;
+
+                                string filename = $"Screenshot_{currentCount}.jpg";
+                                string fullPath = Path.Combine(mediaFolderPath, filename);
+
+                                ImageCodecInfo jpegEncoder = GetEncoder(ImageFormat.Jpeg);
+                                if (jpegEncoder != null)
                                 {
-                                    if (bmp.Width == lastImgWidth && bmp.Height == lastImgHeight) return;
-
-                                    if (bmp.Width != lastImgWidth || bmp.Height != lastImgHeight)
+                                    using (EncoderParameters encoderParams = new EncoderParameters(1))
                                     {
-                                        lastImgWidth = bmp.Width;
-                                        lastImgHeight = bmp.Height;
-                                        lastText = "";
+                                        encoderParams.Param = new[] { new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 85L) };
 
-                                        int currentCount = ++imageCounter;
-                                        string imgId = $"Screenshot {currentCount}";
-                                        string metaInfo = $"🖼️ Скриншот ({bmp.Width}x{bmp.Height})";
-
-                                        Image thumb = CreateHighQualityScale(bmp, 48, 48);
-                                        safeThumbnails[imgId] = thumb;
-
-                                        string filename = $"Screenshot_{currentCount}.jpg";
-                                        string fullPath = Path.Combine(mediaFolderPath, filename);
-
-                                        ImageCodecInfo jpegEncoder = GetEncoder(ImageFormat.Jpeg);
-                                        if (jpegEncoder != null)
+                                        // Проверка дубликатов по весу файла в памяти
+                                        using (var ms = new System.IO.MemoryStream())
                                         {
-                                            using (EncoderParameters encoderParams = new EncoderParameters(1))
+                                            bmp.Save(ms, jpegEncoder, encoderParams);
+                                            long currentLength = ms.Length;
+
+                                            if (currentCount > 1)
                                             {
-                                                encoderParams.Param = new[] { new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 85L) };
-                                                bmp.Save(fullPath, jpegEncoder, encoderParams);
+                                                string prevFilename = $"Screenshot_{currentCount - 1}.jpg";
+                                                string prevFullPath = Path.Combine(mediaFolderPath, prevFilename);
+
+                                                if (System.IO.File.Exists(prevFullPath))
+                                                {
+                                                    long prevLength = new System.IO.FileInfo(prevFullPath).Length;
+
+                                                    if (currentLength == prevLength)
+                                                    {
+                                                        --imageCounter;
+                                                        return;
+                                                    }
+                                                }
                                             }
+
+                                            System.IO.File.WriteAllBytes(fullPath, ms.ToArray());
                                         }
-
-                                        ClipboardPayload payload = new ClipboardPayload
-                                        {
-                                            Id = "IMG_" + Guid.NewGuid().ToString("N"),
-                                            Type = "IMG",
-                                            Body = imgId,
-                                            Meta = metaInfo,
-                                            Alias = ""
-                                        };
-                                        AddItemToRegistry(payload);
                                     }
                                 }
-                            }
-                        }
-                        else if (IsClipboardFormatAvailable(CF_UNICODETEXT))
-                        {
-                            IntPtr hGlobal = GetClipboardData(CF_UNICODETEXT);
-                            if (hGlobal != IntPtr.Zero)
-                            {
-                                IntPtr lpString = GlobalLock(hGlobal);
-                                if (lpString != IntPtr.Zero)
+
+                                ClipboardPayload payload = new ClipboardPayload
                                 {
-                                    string currentText = Marshal.PtrToStringUni(lpString) ?? "";
-                                    GlobalUnlock(hGlobal);
+                                    Id = "IMG_" + Guid.NewGuid().ToString("N"),
+                                    Type = "IMG",
+                                    Body = imgId,
+                                    Meta = metaInfo,
+                                    Alias = ""
+                                };
 
-                                    string trimmedText = currentText.Trim();
+                                AddItemToRegistry(payload);
+                            }
+                        }
+                    }
+                    // --- БЛОК ОБРАБОТКИ ТЕКСТА ---
+                    else if (IsClipboardFormatAvailable(CF_UNICODETEXT))
+                    {
+                        IntPtr hGlobal = GetClipboardData(CF_UNICODETEXT);
+                        if (hGlobal != IntPtr.Zero)
+                        {
+                            IntPtr lpString = GlobalLock(hGlobal);
+                            if (lpString != IntPtr.Zero)
+                            {
+                                string currentText = Marshal.PtrToStringUni(lpString) ?? "";
+                                GlobalUnlock(hGlobal);
 
-                                    // Если текст полностью совпадает с предыдущим скопированным — игнорируем, чтобы не плодить дубликаты
-                                    if (trimmedText == lastText.Trim()) return;
+                                string trimmedText = currentText.Trim();
 
-                                    if (!string.IsNullOrEmpty(trimmedText) && trimmedText != lastText.Trim())
+                                if (!string.IsNullOrEmpty(trimmedText) && trimmedText != lastText.Trim())
+                                {
+                                    lastText = currentText;
+
+                                    ClipboardPayload payload = new ClipboardPayload
                                     {
-                                        lastText = currentText;
-                                        lastImgWidth = 0;
-                                        lastImgHeight = 0;
+                                        Id = "TXT_" + Guid.NewGuid().ToString("N"),
+                                        Type = "TXT",
+                                        Body = currentText,
+                                        Meta = "",
+                                        Alias = ""
+                                    };
 
-                                        // ИСПРАВЛЕНО: УДАЛЕНА СТРОКА RemoveAll(), которая вычищала историю базы при старте!
-
-                                        ClipboardPayload payload = new ClipboardPayload
-                                        {
-                                            Id = "TXT_" + Guid.NewGuid().ToString("N"),
-                                            Type = "TXT",
-                                            Body = currentText,
-                                            Meta = "",
-                                            Alias = ""
-                                        };
-                                        AddItemToRegistry(payload);
-                                    }
+                                    AddItemToRegistry(payload);
                                 }
                             }
                         }
                     }
-                    catch { }
-                    finally
-                    {
-                        CloseClipboard();
-                    }
+                }
+                catch
+                {
+                    // Игнорируем ошибки WinAPI
+                }
+                finally
+                {
+                    CloseClipboard();
+                    isProcessingClipboard = false;
                 }
             }
         }
+
+
+
 
         private void ShowAndActivateForm()
         {
@@ -1652,6 +1670,13 @@ namespace Clpx
             {
                 Button btnHistoryItem = new Button();
                 btnHistoryItem.Text = "   🕒    " + historyQuery;
+
+                btnHistoryItem.Click += (s, e) =>
+                {
+                    string selectedQuery = btnHistoryItem.Text.Replace("🔍 ", "").Trim();
+                    txtSearch.Text = selectedQuery;
+                    txtSearch.SelectionStart = txtSearch.Text.Length;
+                };
 
                 // Делаем кнопки чуть уже панели (минус 16 пикселей), создавая красивый отступ по бокам
                 btnHistoryItem.Width = pnlSearchHistory.Width - 16;
