@@ -78,6 +78,7 @@ namespace Clpx
                 this.WindowState = FormWindowState.Minimized;
                 this.Load += (s, e) => { if (s != null) this.Hide(); };
             }
+
         }
 
         private void UpdateListViewLayout()
@@ -299,6 +300,7 @@ namespace Clpx
 
             // ИСПРАВЛЕНО: Разрешаем программе слушать буфер обмена после полной загрузки
             isInitializing = false;
+            txtSearch_Leave(txtSearch, EventArgs.Empty);
         }
 
 
@@ -361,6 +363,10 @@ namespace Clpx
 
         private void OnClipboardChangedNotification()
         {
+            if (DateTime.Now < ignoreClipboardUntil)
+            {
+                return;
+            }
             if (isChangingLanguage) return;
             if (isInitializing) return;
             if (isProcessingClipboard) return;
@@ -659,11 +665,13 @@ namespace Clpx
                     }
 
                     // Перезаписываем текст заголовка красивым, ровным номером
-                    imgMeta = $"Скриншот №{imgNumber}";
+                    imgMeta = (currentLanguage == "EN")
+                        ? $"Screenshot #{imgNumber}"
+                        : $"Скриншот №{imgNumber}";
                 }
 
-                Color textColor = isSelected ? Color.White : Color.FromArgb(165, 180, 252);
-                TextRenderer.DrawText(g, "🖼️ " + imgMeta, listClipboard.Font, textBounds, textColor, textFlags);
+                string finalImgText = "🖼️ " + imgMeta;
+                TextRenderer.DrawText(g, finalImgText, listClipboard.Font, textBounds, listClipboard.ForeColor, textFlags);
             }
 
             else
@@ -737,6 +745,7 @@ namespace Clpx
                     {
                         lastText = keyId;
                         lastImgWidth = 0; lastImgHeight = 0;
+                        ignoreClipboardUntil = DateTime.Now.AddMilliseconds(150);
                         Clipboard.SetText(keyId);
                     }
                     else if (lvi.Name == "IMG")
@@ -750,6 +759,7 @@ namespace Clpx
                                 lastImgWidth = img.Width;
                                 lastImgHeight = img.Height;
                                 lastText = "";
+                                ignoreClipboardUntil = DateTime.Now.AddMilliseconds(150);
                                 Clipboard.SetImage(img);
                             }
                         }
@@ -1377,7 +1387,7 @@ namespace Clpx
             // // 2. ШАПКА ОКНА
             Label lblHeader = new Label
             {
-                Text = isEn ? "⚡ CLIPBOARD MANAGER ClipX Ultimate v5.0" : "⚡ МЕНЕДЖЕР БУФЕРА ОБМЕНА ClpX Ultimate v5.0",
+                Text = isEn ? "⚡ CLIPBOARD MANAGER ClipX Ultimate v5.0.1" : "⚡ МЕНЕДЖЕР БУФЕРА ОБМЕНА ClpX Ultimate v5.0.1",
                 Font = fontTitle,
                 ForeColor = colorGrayText,
                 Location = new Point(24, currentY),
@@ -1583,19 +1593,27 @@ namespace Clpx
                 base.WndProc(ref m);
             }
         }
-        private void txtSearch_Click(object sender, EventArgs e)
-        {
-            // При клике принудительно перерисовываем и показываем всю историю
-            UpdateHistoryPanelVisuals();
-        }
         private async void txtSearch_Leave(object sender, EventArgs e)
         {
-            
             await Task.Delay(100);
 
             pnlSearchHistory.Visible = false;
             infoPanel.Height = 220; // Возвращаем стандартную высоту плашки
+
+            // ПРАВКА: Если пользователь ничего не ввел, возвращаем подсказку на нужном языке
+            if (string.IsNullOrWhiteSpace(txtSearch.Text))
+            {
+                txtSearch.Text = (currentLanguage == "EN")
+                    ? "🔍 start typing here to search..."
+                    : "🔍 начните писать здесь для поиска...";
+            }
+
             ApplyFilters();
+        }
+
+        private void txtSearch_Click(object sender, EventArgs e)
+        {
+            // Оставляем пустым, чтобы компилятор не ругался
         }
 
         private void txtSearch_KeyDown(object sender, KeyEventArgs e)
@@ -1783,6 +1801,9 @@ namespace Clpx
             // Переводим кнопки
             TranslateControls(this);
             lblNoResults.Text = (currentLanguage == "EN") ? "🔍 Nothing found" : "🔍 Ничего не найдено";
+            statusLabel.Text = (currentLanguage == "EN") ? "The program runs and remembers your buffer." : "Программа работает и запоминает ваш буфер";
+            listClipboard.Invalidate();
+            listClipboard.Update();
 
             // Выключаем режим защиты
             isChangingLanguage = false;
@@ -1795,22 +1816,21 @@ namespace Clpx
             {
                 if (currentLanguage == "EN")
                 {
-                    if (c.Text == "⚡ Всё") c.Text = "⚡ All";
-                    else if (c.Text == "📄 Текст") c.Text = "📄 Text";
-                    else if (c.Text == "🖼️ Картинки") c.Text = "🖼️ Images";
-                    else if (c.Text == "🗑️ Стереть всё") c.Text = "🗑️ Clear all";
+                    if (c.Text.Contains("Всё")) c.Text = "⚡ All";
+                    else if (c.Text.Contains("Текст")) c.Text = "📄 Text";
+                    else if (c.Text.Contains("Картинки")) c.Text = "🖻 Images"; // Подставит правильную иконку 🖻
+                    else if (c.Text.Contains("Стереть всё")) c.Text = "🗑️ Clear all";
                     else if (c.Text.Contains("Нужна помощь?")) c.Text = "Need help?\nPress F1";
                 }
                 else
                 {
-                    if (c.Text == "⚡ All") c.Text = "⚡ Всё";
-                    else if (c.Text == "📄 Text") c.Text = "📄 Текст";
-                    else if (c.Text == "🖼️ Images") c.Text = "🖼️ Картинки";
-                    else if (c.Text == "🗑️ Clear all") c.Text = "🗑️ Стереть всё";
+                    if (c.Text.Contains("All")) c.Text = "⚡ Всё";
+                    else if (c.Text.Contains("Text")) c.Text = "📄 Текст";
+                    else if (c.Text.Contains("Images")) c.Text = "🖻 Картинки"; // Подставит правильную иконку 🖻
+                    else if (c.Text.Contains("Clear all")) c.Text = "🗑️ Стереть всё";
                     else if (c.Text.Contains("Need help?")) c.Text = "Нужна помощь?\nНажми F1";
                 }
 
-                // Если у элемента есть под-элементы (как у infoPanel), переводим и их
                 if (c.HasChildren) TranslateControls(c);
             }
         }

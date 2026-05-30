@@ -53,7 +53,7 @@ namespace Clpx
 
         
         private bool isInitializing = true;
-
+        private DateTime ignoreClipboardUntil = DateTime.MinValue;
 
         private readonly Label lblNoResults = new Label();
 
@@ -129,7 +129,6 @@ namespace Clpx
         private const int WM_HELP = 0x0053;
 
         private int lastSavedWidth = 0;
-        private int lastSavedHeight = 0;
         private static DateTime lastSavedTime = DateTime.MinValue;
 
 
