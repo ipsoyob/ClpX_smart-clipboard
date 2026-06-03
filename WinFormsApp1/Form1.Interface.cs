@@ -34,13 +34,17 @@ namespace Clpx
             lblInfo.AutoSize = false;
             lblInfo.ForeColor = Color.FromArgb(165, 180, 252);
             lblInfo.Font = infoFont;
-            lblInfo.Text = "💡 Нужна помощь?\n" + "Нажми F1";
+            lblInfo.Text = LanguageManager.GetString("lblInfo");
             infoPanel.Controls.Add(lblInfo);
             tabPanel.BackColor = Color.Transparent;
 
-            BuildTabButton(btnTabAll, "⚡ Всё", 0, "ALL", infoFont);
-            BuildTabButton(btnTabTxt, "📄 Текст", 0, "TXT", infoFont);
-            BuildTabButton(btnTabImg, "🖼 Картинки", 0, "IMG", infoFont);
+            string allmg = LanguageManager.GetString("btnAll");
+            string txtmg = LanguageManager.GetString("btnText");
+            string imgmg = LanguageManager.GetString("btnImages");
+
+            BuildTabButton(btnTabAll, allmg, 0, "ALL", infoFont);
+            BuildTabButton(btnTabTxt, txtmg, 0, "TXT", infoFont);
+            BuildTabButton(btnTabImg, imgmg, 0, "IMG", infoFont);
 
             Action resizeButtons = () => {
                 int totalWidth = tabPanel.Width;
@@ -84,16 +88,25 @@ namespace Clpx
                 if (string.IsNullOrWhiteSpace(txtSearch.Text))
                 {
                     // Проверяем язык и ставим правильный плейсхолдер
-                    txtSearch.Text = (currentLanguage == "EN")
-                        ? "🔍 start typing here to search..."
-                        : "🔍 начните писать здесь для поиска...";
+                    if (currentLanguage == "EN")
+                    {
+                        LanguageManager.SetLanguage("en");
+                        txtSearch.Text = LanguageManager.GetString("txtSearch");
+                        LanguageManager.ApplyLocalization(this);
+                    }
+                    else
+                    {
+                        LanguageManager.SetLanguage("ru");
+                        txtSearch.Text = LanguageManager.GetString("txtSearch");
+                        LanguageManager.ApplyLocalization(this);
+                    }
                 }
                 isChangingLanguage = false;
             };
             txtSearch.Enter += (s, e) =>
             {
                 isChangingLanguage = true;
-                if (txtSearch.Text == "🔍 начните писать здесь для поиска..." || txtSearch.Text == "🔍 start typing here to search...")
+                if (txtSearch.Text == LanguageManager.GetString("txtSearch"))
                 {
                     txtSearch.Text = "";
                 }
@@ -101,7 +114,7 @@ namespace Clpx
             };
 
 
-            txtSearch.Leave += (s, e) => { if (string.IsNullOrWhiteSpace(txtSearch.Text)) txtSearch.Text = "🔍 Начните писать здесь для поиска..."; };
+            txtSearch.Leave += (s, e) => { if (string.IsNullOrWhiteSpace(txtSearch.Text)) txtSearch.Text = LanguageManager.GetString("txtSearch"); };
             txtSearch.TextChanged += (s, e) =>
             {
                 ApplyFilters();
@@ -195,7 +208,8 @@ namespace Clpx
             pnlSearchHistory.BringToFront();
 
 
-            btnClearDb.Text = "🗑️ Стереть всё";
+            btnClearDb.Text = LanguageManager.GetString("btnClearDb");
+            LanguageManager.ApplyLocalization(this);
             btnClearDb.FlatStyle = FlatStyle.Flat;
             btnClearDb.FlatAppearance.BorderColor = Color.FromArgb(239, 68, 68);
             btnClearDb.FlatAppearance.BorderSize = 1;
@@ -237,7 +251,7 @@ namespace Clpx
             statusStrip.RenderMode = ToolStripRenderMode.System;
             statusLabel.ForeColor = Color.FromArgb(140, 145, 160);
             statusLabel.Font = statusFont;
-            statusLabel.Text = (currentLanguage == "EN") ? "The program runs and remembers your buffer." : " Программа работает и запоминает ваш буфер";
+            statusLabel.Text = LanguageManager.GetString("statusLabel");
             statusStrip.Items.Add(statusLabel);
             this.Controls.Add(statusStrip);
 
@@ -263,9 +277,33 @@ namespace Clpx
             trayIcon.Visible = true;
             trayIcon.DoubleClick += (s, e) => ShowAndActivateForm();
 
-            trayMenu.Items.Add("Открыть менеджер", null, (s, e) => ShowAndActivateForm());
-            trayMenu.Items.Add(new ToolStripSeparator());
-            trayMenu.Items.Add("Закрыть полностью", null, (s, e) => { allowActualClose = true; this.Close(); });
+            // 1. Инициализируем сочное меню Guna
+            trayMenu = new Guna.UI2.WinForms.Guna2ContextMenuStrip();
+
+            // 2. Настраиваем темный стиль и скругление углов (эффект Windows 11)
+            trayMenu.BackColor = Color.FromArgb(22, 22, 30);                // Темный фон
+            trayMenu.ForeColor = Color.FromArgb(240, 240, 240);
+            trayMenu.ShowImageMargin = false;// Светлый текст        
+            trayMenu.RenderStyle.SelectionBackColor = Color.FromArgb(99, 102, 241); // Фиолетовый при наведении
+            trayMenu.RenderStyle.SelectionForeColor = Color.White;          // Белый текст при наведении
+
+            // 3. Создаем пункт "Открыть менеджер"
+            ToolStripMenuItem itemOpen = new ToolStripMenuItem(LanguageManager.GetString("menuOpen"));
+            itemOpen.Name = "menuOpen";
+            itemOpen.Click += (s, e) => ShowAndActivateForm();
+
+            // 4. Создаем пункт "Закрыть полностью"
+            ToolStripMenuItem itemClose = new ToolStripMenuItem(LanguageManager.GetString("menuClose"));
+            itemClose.Name = "menuClose";
+            itemClose.Click += (s, e) => { allowActualClose = true; this.Close(); };
+
+            // 5. Наполняем меню элементами
+            trayMenu.Items.Add(itemOpen);
+            trayMenu.Items.Add(new ToolStripSeparator()); // Аккуратный разделитель
+            trayMenu.Items.Add(itemClose);
+
+            
+            trayIcon.ContextMenuStrip = trayMenu;
             trayIcon.ContextMenuStrip = trayMenu;
 
             listClipboard.DoubleClick += (s, e) => ListClipboard_DoubleClick(s, e);
@@ -276,9 +314,10 @@ namespace Clpx
             lblNoResults.Size = new Size(300, 30);
             lblNoResults.ForeColor = Color.FromArgb(140, 145, 160); // Приглушенный серый
             lblNoResults.Font = new Font("Segoe UI", 15f, FontStyle.Bold);
-            lblNoResults.Text = (currentLanguage == "EN") ? "🔍 Nothing found" : "🔍 Ничего не найдено";
+            lblNoResults.Text = LanguageManager.GetString("lblNoResults");
             lblNoResults.TextAlign = ContentAlignment.MiddleCenter;
             lblNoResults.Visible = false; // По умолчанию скрыта
+
 
             // Добавляем её прямо на форму и выводим на самый передний план
             this.Controls.Add(lblNoResults);

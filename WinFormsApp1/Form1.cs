@@ -37,7 +37,7 @@ namespace Clpx
                     {
                         listClipboard.BeginInvoke(new Action(() =>
                         {
-                            statusLabel.Text = (currentLanguage == "EN") ? "Ready" : "Готов";
+                            statusLabel.Text = LanguageManager.GetString("statusReady");
                             statusLabel.ForeColor = Color.FromArgb(160, 165, 185);
                             listClipboard.Invalidate();
                         }));
@@ -131,22 +131,28 @@ namespace Clpx
             btnClearDb.Height = targetHeight;
         }
 
-        private void ApplyFilters()
+        private async void ApplyFilters()
         {
+            // 1. Если сейчас идет процесс смены языка — полностью блокируем фильтрацию
             if (isChangingLanguage) return;
 
             string query = txtSearch.Text.Trim().ToLower();
 
-            if (query == "🔍 начните писать здесь для поиска..." ||
-        query == "🔍 start typing here to search...")
+            // Достаем актуальный плейсхолдер из ресурсов и тоже переводим в нижний регистр
+            string resourcePlaceholder = LanguageManager.GetString("txtSearch")?.Trim().ToLower();
+
+            // 2. Проверяем, не является ли текст в поле служебной подсказкой (плейсхолдером)
+            if (query == resourcePlaceholder ||
+                query == "введи имя карточки" ||
+                query == "🔍 начните писать здесь для поиска..." ||
+                query == "enter card name")
             {
                 query = "";
             }
 
-            if (query == "🔍 начните писать здесь для поиска...") query = "";
-
             List<ListViewItem> filtered = new List<ListViewItem>();
 
+            // 3. Блокируем поток и фильтруем карточки из реестра
             lock (clipboardLock)
             {
                 foreach (var item in masterRegistry)
@@ -169,7 +175,7 @@ namespace Clpx
                         if (!textToSearch.Contains(query)) continue;
                     }
 
-                    // РОДНОЙ ИСПРАВЛЕННЫЙ МЕТОД: Привязка visual-карточки строго к её родному ID из JSON
+                    // Привязка visual-карточки строго к её родному ID из JSON
                     ListViewItem lvi = new ListViewItem(item.Body)
                     {
                         Name = item.Type,
@@ -180,6 +186,7 @@ namespace Clpx
                 }
             }
 
+            // 4. Отрисовываем полученные элементы в визуальный список
             if (listClipboard.IsHandleCreated)
             {
                 listClipboard.BeginUpdate();
@@ -190,26 +197,54 @@ namespace Clpx
                 }
                 listClipboard.EndUpdate();
             }
-           
-            if (listClipboard.Items.Count == 0)
+
+            // ==========================================
+            // ЗДЕСЬ НАЧИНАЕТСЯ ФИКС МЕРЦАНИЯ И ОТОБРАЖЕНИЯ НАДПИСИ
+            // ==========================================
+
+            // Отменяем предыдущий запланированный вывод надписи, если клавиша была нажата слишком быстро
+            filterCts?.Cancel();
+            filterCts = new System.Threading.CancellationTokenSource();
+            var token = filterCts.Token;
+
+            try
             {
-                lblNoResults.Visible = true;
+                // Крошечная микро-пауза в 20 миллисекунд поглощает "дребезг" параллельных вызовов ApplyFilters()
+                await Task.Delay(20, token);
+
+                // Если за 20 мс никто больше фильтр не дернул — спокойно и без мигания обновляем экран
+                if (filtered.Count == 0 && !string.IsNullOrEmpty(query))
+                {
+                    if (!lblNoResults.Visible)
+                    {
+                        lblNoResults.Text = LanguageManager.GetString("lblNoResults");
+                        lblNoResults.Visible = true;
+                        lblNoResults.BringToFront(); // Выталкиваем надпись на самый верхний слой графики
+                    }
+                }
+                else
+                {
+                    if (lblNoResults.Visible)
+                    {
+                        lblNoResults.Visible = false;
+                    }
+                }
             }
-            else
+            catch (TaskCanceledException)
             {
-                lblNoResults.Visible = false;
+                // Этот блок срабатывает автоматически, если прилетел новый символ — старый вызов просто уничтожается
             }
         }
+
 
         private void ClearFullDatabase()
         {
             bool isEn = (currentLanguage == "EN");
 
-            string msgText = isEn
-                ? "Are you sure you want to completely clear the history, delete saved screenshots, and clear the system clipboard?"
-                : "Вы уверены, что хотите полностью очистить историю, удалить сохраненные скриншоты и очистить системный буфер?";
+            string msgText = LanguageManager.GetString("msgText");
 
-            string msgCaption = isEn ? "Database Cleanup" : "Очистка базы данных";
+
+            string msgCaption = LanguageManager.GetString("msgCaption");
 
             var result = MessageBox.Show(msgText, msgCaption, MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
 
@@ -245,28 +280,26 @@ namespace Clpx
                     catch { }
                 }
 
-                string placeholderText = isEn ? "🔍 start typing here to search..." : "🔍 начните писать здесь для поиска...";
+                string placeholderText = LanguageManager.GetString("txtSearch");
                 if (txtSearch.Text != placeholderText) txtSearch.Text = placeholderText;
                 ApplyFilters();
 
-                statusLabel.Text = isEn ? "🗑️ Database completely cleared" : "🗑️ База данных полностью очищена";
+                statusLabel.Text = LanguageManager.GetString("msgDbCleared");
                 statusLabel.ForeColor = Color.FromArgb(248, 113, 113);
 
                 System.Windows.Forms.Timer clearStatusTimer = new System.Windows.Forms.Timer { Interval = 1000 };
                 clearStatusTimer.Tick += (st, evv) =>
                 {
                     clearStatusTimer.Stop();
-                    statusLabel.Text = isEn ? "Ready" : "Готово";
+                    statusLabel.Text = LanguageManager.GetString("statusReady");
                     statusLabel.ForeColor = Color.FromArgb(160, 165, 185);
                     clearStatusTimer.Dispose();
                 };
                 clearStatusTimer.Start();
 
-                string successText = isEn
-                    ? "Local database, media folder, and clipboard cleared successfully."
-                    : "Локальная база данных, папка media и буфер обмена успешно очищены.";
+                string successText = LanguageManager.GetString("successText");
 
-                string successCaption = isEn ? "Success" : "Готово";
+                string successCaption = LanguageManager.GetString("successCaption");
 
                 MessageBox.Show(successText, successCaption, MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -303,15 +336,31 @@ namespace Clpx
             txtSearch_Leave(txtSearch, EventArgs.Empty);
         }
 
+        protected override void OnLoad(EventArgs e)
+        {
+            base.OnLoad(e);
+            AddClipboardFormatListener(this.Handle); // Подписываем форму на сообщения 0x031D
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            RemoveClipboardFormatListener(this.Handle); // Обязательно отписываем форму при закрытии
+            base.OnFormClosing(e);
+        }
 
         protected override void WndProc(ref Message m)
         {
+            // Системные константы сообщений Windows
+            const int WM_HELP = 0x0053;
+            const int WM_HOTKEY = 0x0312;
+            const int WM_WINDOWPOSCHANGING = 0x0046;
+            const int WM_CLIPBOARDUPDATE = 0x031D; // Современный перехват буфера обмена
+
             switch (m.Msg)
             {
                 case WM_HELP:
                     ShowHelpDialog();
                     return;
-
 
                 case WM_HOTKEY:
                     int pressedHotkeyId = m.WParam.ToInt32();
@@ -320,45 +369,53 @@ namespace Clpx
                     {
                         ShowAndActivateForm();
                     }
-                    // ДОБАВЬТЕ ЭТОТ БЛОК: Перехват нажатия ALT + A
                     else if (pressedHotkeyId == HOTKEY_AUTHOR_ID)
                     {
                         // Подсвечиваем статус-бар красивым индиго-неоновым цветом
-                        statusLabel.Text = " ⚡ made by @ipsoyob";
+                        statusLabel.Text = LanguageManager.GetString("authId");
                         statusLabel.ForeColor = Color.FromArgb(129, 140, 248);
 
-                        // Таймер автоматически вернет надпись "Ready" ровно через 3 секунды
+                        // Таймер автоматически вернет надпись дефолтного статуса ровно через 3 секунды
                         System.Windows.Forms.Timer authorTimer = new System.Windows.Forms.Timer { Interval = 3000 };
                         authorTimer.Tick += (st, evv) =>
                         {
                             authorTimer.Stop();
-                            statusLabel.Text = " Ready";
+
+                            // Берем перевод статуса напрямую из файлов ресурсов
+                            statusLabel.Text = LanguageManager.GetString("statusReady");
                             statusLabel.ForeColor = Color.FromArgb(160, 165, 185);
+
                             authorTimer.Dispose();
                         };
                         authorTimer.Start();
                     }
                     break;
 
+                case WM_CLIPBOARDUPDATE:
+                    // Асинхронное ожидание, чтобы тяжелые скриншоты/картинки успели прогрузиться в память буфера
+                    System.Threading.Tasks.Task.Run(async () =>
+                    {
+                        await System.Threading.Tasks.Task.Delay(1); // Микропауза 50 мс для завершения записи в Windows
+
+                        // Возвращаемся в главный UI-поток формы для безопасного обновления списка карточек
+                        this.BeginInvoke(new Action(() =>
+                        {
+                            OnClipboardChangedNotification();
+                        }));
+                    });
+                    break;
+
                 case WM_WINDOWPOSCHANGING:
                     UpdateListViewLayout();
                     break;
 
-                case WM_DRAWCLIPBOARD:
-                    OnClipboardChangedNotification();
-                    SendMessage(nextClipboardViewer, m.Msg, m.WParam, m.LParam);
-                    break;
-
-                case WM_CHANGECBCHAIN:
-                    if (m.WParam == nextClipboardViewer) nextClipboardViewer = m.LParam;
-                    else SendMessage(nextClipboardViewer, m.Msg, m.WParam, m.LParam);
-                    break;
-
                 default:
+                    // Все остальные системные сообщения отдаем стандартному обработчику WinForms
                     base.WndProc(ref m);
                     break;
             }
         }
+
 
 
         private void OnClipboardChangedNotification()
@@ -489,8 +546,6 @@ namespace Clpx
                 }
             }
         }
-
-
 
 
         private void ShowAndActivateForm()
@@ -682,7 +737,9 @@ namespace Clpx
                 displayName = displayName.TrimStart();
 
                 // Оставляем один аккуратный пробел после двоеточия для читаемости
-                string iconPrefix = displayName.Contains("{") || displayName.Contains(";") || displayName.Contains("void") ? "🖨️ Код: " : "📄 Текст: ";
+                string iconPrefix = displayName.Contains("{") || displayName.Contains(";") || displayName.Contains("void")
+                    ? LanguageManager.GetString("prefixCode")
+                    : LanguageManager.GetString("prefixText");
 
                 Color textColor = isSelected ? Color.White : (hasCustomName ? Color.FromArgb(129, 140, 248) : Color.FromArgb(215, 220, 235));
                 TextRenderer.DrawText(g, iconPrefix + displayName, listClipboard.Font, textBounds, textColor, textFlags);
@@ -1387,7 +1444,7 @@ namespace Clpx
             // // 2. ШАПКА ОКНА
             Label lblHeader = new Label
             {
-                Text = isEn ? "⚡ CLIPBOARD MANAGER ClipX Ultimate v5.0.1" : "⚡ МЕНЕДЖЕР БУФЕРА ОБМЕНА ClpX Ultimate v5.0.1",
+                Text = LanguageManager.GetString("lblHeader"),
                 Font = fontTitle,
                 ForeColor = colorGrayText,
                 Location = new Point(24, currentY),
@@ -1400,7 +1457,7 @@ namespace Clpx
             // // 3. БЛОК: ГОРЯЧИЕ КЛАВИШИ
             Label lblSecHotkeys = new Label
             {
-                Text = isEn ? "⌨️ Control Hotkeys" : "⌨️ Горячие клавиши управления",
+                Text = LanguageManager.GetString("lblSecHotkeys"),
                 Font = fontSection,
                 ForeColor = Color.White,
                 Location = new Point(24, currentY),
@@ -1411,19 +1468,12 @@ namespace Clpx
             currentY += 25;
 
             // Двумерный массив с данными локализации горячих клавиш
-            string[,] hotkeysData = isEn ? new string[,] {
-        { "Alt + X", "Quick show / hide main window" },
-        { "Alt + A", "Check developer copyright" },
-        { "F1", "Show this help window" },
-        { "Delete", "Permanently delete selected card" },
-        { "P", "Preview screenshot" }
-    } : new string[,] {
-        { "Alt + X", "Быстрый вызов / скрытие главного окна" },
-        { "Alt + A", "Проверка авторских прав разработчика" },
-        { "F1", "Вызов данного окна справки" },
-        { "Delete", "Безвозвратное удаление выбранной карточки" },
-        { "P", "Предпросмотр скриншота" }
-    };
+            string[,] hotkeysData = new string[,] {
+        { "Alt + X", LanguageManager.GetString("hk_QuickShow")},
+        { "Alt + A", LanguageManager.GetString("hk_Copyright")},
+        { "F1", LanguageManager.GetString("hk_Help")},
+        { "Delete",LanguageManager.GetString("hk_Delete")},
+        { "P", LanguageManager.GetString("hk_Preview")}};
 
             for (int i = 0; i < hotkeysData.GetLength(0); i++)
             {
@@ -1474,7 +1524,7 @@ namespace Clpx
             // // 4. БЛОК: ИНТЕРФЕЙС И UX
             Label lblSecUi = new Label
             {
-                Text = isEn ? "✍️ Interface and UX" : "✍️ Интерфейс и UX",
+                Text = LanguageManager.GetString("lblSecUi"),
                 Font = fontSection,
                 ForeColor = Color.White,
                 Location = new Point(24, currentY),
@@ -1484,16 +1534,14 @@ namespace Clpx
 
             currentY += 28;
 
-            // Массив строк для описания интерфейса
-            string[] uiData = isEn ? new string[] {
-        "Double-click card — instant return of data to clipboard.",
-        "Right-click (RMB) — context menu (Rename / Delete).",
-        "Tabs at the top — history filtering (All / Text / Images)."
-    } : new string[] {
-        "Двойной клик по карточке — мгновенный возврат данных в буфер.",
-        "Правый клик (ПКМ) — контекстное меню (Переименовать / Удалить).",
-        "Вкладки вверху — фильтрация истории (Все / Текст / Изображения)."
-    };
+            string[] uiData = new string[]
+                {
+
+                LanguageManager.GetString("ui_DoubleClick"),
+                LanguageManager.GetString("ui_RightClick"),
+                LanguageManager.GetString("ui_Tabs")
+                };
+
 
             foreach (string item in uiData)
             {
@@ -1522,34 +1570,6 @@ namespace Clpx
 
             currentY += 12;
 
-            // // 5. НИЖНЯЯ ПЛАНКА С ИНФОРМАЦИЕЙ
-            Panel pnlInfo = new Panel
-            {
-                Location = new Point(24, currentY),
-                Size = new Size(472, 54),
-                BackColor = Color.FromArgb(32, 32, 38)
-            };
-
-            pnlInfo.Paint += (s, e) =>
-            {
-                using (Pen p = new Pen(colorAccent, 2))
-                {
-                    e.Graphics.DrawLine(p, 0, 0, 0, pnlInfo.Height);
-                }
-            };
-
-            Label lblInfoText = new Label
-            {
-                Text = isEn
-                    ? "The program runs asynchronously at 144Hz+ with no UI blocking."
-                    : "Программа работает в асинхронном режиме на частоте 144Hz+ без блокировок UI.",
-                Font = new Font("Segoe UI", 9F, FontStyle.Regular),
-                ForeColor = colorGrayText,
-                Location = new Point(16, 12),
-                Size = new Size(440, 32)
-            };
-            pnlInfo.Controls.Add(lblInfoText);
-            helpForm.Controls.Add(pnlInfo);
 
             // // 6. КНОПКА ЗАКРЫТИЯ (ОК)
             Button btnOk = new Button
@@ -1595,25 +1615,49 @@ namespace Clpx
         }
         private async void txtSearch_Leave(object sender, EventArgs e)
         {
+            // Оставляем вашу задержку для корректной работы UI
             await Task.Delay(100);
 
             pnlSearchHistory.Visible = false;
             infoPanel.Height = 220; // Возвращаем стандартную высоту плашки
 
-            // ПРАВКА: Если пользователь ничего не ввел, возвращаем подсказку на нужном языке
+            // 1. Достаем подсказку из ресурсов по вашему ключу "txtSearch"
+            string placeholder = LanguageManager.GetString("txtSearch");
+
+            // 2. Если пользователь ничего не ввел, возвращаем подсказку на актуальном языке
             if (string.IsNullOrWhiteSpace(txtSearch.Text))
             {
-                txtSearch.Text = (currentLanguage == "EN")
-                    ? "🔍 start typing here to search..."
-                    : "🔍 начните писать здесь для поиска...";
+                txtSearch.Text = placeholder;
             }
 
-            ApplyFilters();
+            // 3. ЗАЩИТА ФИЛЬТРА: Если в поле сейчас лежит подсказка, 
+            // мы временно очищаем его перед фильтрацией, чтобы карточки НЕ пропадали!
+            if (txtSearch.Text == placeholder)
+            {
+                // Временно сбрасываем текст для фильтра, чтобы он показал ВСЕ карточки
+                txtSearch.Text = string.Empty;
+                ApplyFilters();
+                txtSearch.Text = placeholder; // Возвращаем визуальную подсказку на место
+            }
+            else
+            {
+                // Если там реальный текст пользователя — просто фильтруем как обычно
+                ApplyFilters();
+            }
         }
+
 
         private void txtSearch_Click(object sender, EventArgs e)
         {
-            // Оставляем пустым, чтобы компилятор не ругался
+            // 1. Берем актуальный плейсхолдер из .resx файла
+            string currentPlaceholder = LanguageManager.GetString("txtSearch");
+
+            // 2. Если в поле сейчас плейсхолдер — очищаем его для ввода текста
+            if (txtSearch.Text == currentPlaceholder)
+            {
+                txtSearch.Text = "";
+                txtSearch.ForeColor = Color.Gray; 
+            }
         }
 
         private void txtSearch_KeyDown(object sender, KeyEventArgs e)
@@ -1621,15 +1665,23 @@ namespace Clpx
             if (e.KeyCode == Keys.Enter)
             {
                 string query = txtSearch.Text.Trim().ToLower();
-                if (query != "🔍 начните писать здесь для поиска..." && !string.IsNullOrEmpty(query))
+
+                // 1. Достаем актуальный плейсхолдер из файлов ресурсов (.resx)
+                // Метод GetString сам поймет, какой язык сейчас активен (RU или EN)
+                string currentPlaceholder = LanguageManager.GetString("txtSearch").ToLower();
+
+                // 2. Сравниваем запрос с динамическим плейсхолдером из ресурсов.
+                // Теперь проверка никогда не сломается при смене языка!
+                if (query != currentPlaceholder && !string.IsNullOrEmpty(query))
                 {
-                    AddToSearchHistory(query);
+                    AddToSearchHistory(txtSearch.Text.Trim()); // Передаем оригинальный текст в историю
                 }
 
                 // Подавляем звуковой сигнал Windows при нажатии Enter
                 e.SuppressKeyPress = true;
             }
         }
+
 
         private void AddToSearchHistory(string query)
         {
@@ -1720,7 +1772,7 @@ namespace Clpx
 
                 btnHistoryItem.Click += (s, e) =>
                 {
-                    if (txtSearch.Text == "🔍 начните писать здесь для поиска...") txtSearch.Text = "";
+                    if (txtSearch.Text == LanguageManager.GetString("txtSearch")) txtSearch.Text = "";
                     txtSearch.Text = historyQuery;
                     pnlSearchHistory.Visible = false;
                     infoPanel.Height = 220;
@@ -1757,81 +1809,107 @@ namespace Clpx
             pnlSearchHistory.BringToFront();
         }
 
+        private void UpdateDynamicInterface()
+        {
+            // Получаем переводы из ресурсного файла по ключам
+            string searchPlaceholderRu = LanguageManager.GetString("txtSearch"); // всегда вернет RU версию, если мы временно переключим поток, но у нас логика зависит от текущего языка:
+
+            // Чтобы не запутаться, достаем нужные строки для текущего языка:
+            string historyTitle = LanguageManager.GetString("lblHistoryTitle");
+            string placeholder = LanguageManager.GetString("txtSearch");
+            string noResults = LanguageManager.GetString("lblNoResults");
+
+            btnTabAll.Text = LanguageManager.GetString("btnAll");
+            btnTabTxt.Text = LanguageManager.GetString("btnText");
+            btnTabImg.Text = LanguageManager.GetString("btnImages");
+
+            btnClearDb.Text = LanguageManager.GetString("btnClearDb");
+
+            lblInfo.Text = LanguageManager.GetString("lblInfo");
+
+            statusLabel.Text = LanguageManager.GetString("statusReady");
+
+            lblNoResults.Text = LanguageManager.GetString("lblNoResults");
+
+            txtSearch.Text = LanguageManager.GetString("txtSearch");
+
+            if (trayMenu != null)
+            {
+                // Ищем пункты в коллекции Items по их системному свойству Name
+                if (trayMenu.Items["menuOpen"] is ToolStripMenuItem itemOpen)
+                {
+                    itemOpen.Text = LanguageManager.GetString("menuOpen");
+                }
+
+                if (trayMenu.Items["menuClose"] is ToolStripMenuItem itemClose)
+                {
+                    itemClose.Text = LanguageManager.GetString("menuClose");
+                }
+            }
+
+
+            // Записываем заголовок истории (переменная)
+            historyTitleText = historyTitle;
+
+
+        }
         private void BtnLangToggle_Click(object sender, EventArgs e)
         {
-            // Если язык уже меняется, игнорируем повторные клики
             if (isChangingLanguage) return;
-
-            // Включаем режим защиты
             isChangingLanguage = true;
 
             Button clickedButton = (Button)sender;
+
+            // 1. Меняем язык в менеджере и обновляем флаг текущего языка
             if (currentLanguage == "RU")
             {
+                LanguageManager.SetLanguage("en");
                 currentLanguage = "EN";
                 clickedButton.Text = "EN";
             }
             else
             {
+                LanguageManager.SetLanguage("ru");
                 currentLanguage = "RU";
                 clickedButton.Text = "RU";
             }
 
-            if (currentLanguage == "EN")
-            {
-                historyTitleText = "SEARCH HISTORY";
-                lblInfo.Text = "Need help? (EN)\nPress F1";
+            // 2. Вызываем метод из вашего LanguageManager. 
+            // Он автоматически переведет lblInfo, statusLabel и саму форму, 
+            // если их имена (Name) есть в файле ресурсов!
+            LanguageManager.ApplyLocalization(this);
 
-                if (txtSearch.Text == "🔍 начните писать здесь для поиска...")
-                    txtSearch.Text = "🔍 start typing here to search...";
-                if (lblNoResults.Text == "ничего не найдено")
-                    lblNoResults.Text = "nothing found";
-            }
-            else
-            {
-                historyTitleText = "ИСТОРИЯ ПОИСКА";
-                lblInfo.Text = "Нужна помощь? (RU)\nНажми F1";
+            // 3. Переводим динамический текст, который зависит от условий
+            UpdateDynamicInterface();
 
-                if (txtSearch.Text == "🔍 start typing here to search...")
-                    txtSearch.Text = "🔍 начните писать здесь для поиска...";
-                if (lblNoResults.Text == "nothing found")
-                    lblNoResults.Text = "ничего не найдено";
-            }
-
-            // Переводим кнопки
-            TranslateControls(this);
-            lblNoResults.Text = (currentLanguage == "EN") ? "🔍 Nothing found" : "🔍 Ничего не найдено";
-            statusLabel.Text = (currentLanguage == "EN") ? "The program runs and remembers your buffer." : "Программа работает и запоминает ваш буфер";
+            // 4. Обновляем графику списка
             listClipboard.Invalidate();
             listClipboard.Update();
 
-            // Выключаем режим защиты
             isChangingLanguage = false;
         }
+
 
 
         private void TranslateControls(Control parent)
         {
             foreach (Control c in parent.Controls)
             {
-                if (currentLanguage == "EN")
+                // Пытаемся достать перевод из .resx, используя Name элемента в качестве ключа
+                string translatedText = LanguageManager.GetString(c.Name);
+
+                // Если в файле ресурсов есть перевод для этого элемента — принудительно обновляем его текст
+                if (!string.IsNullOrEmpty(translatedText))
                 {
-                    if (c.Text.Contains("Всё")) c.Text = "⚡ All";
-                    else if (c.Text.Contains("Текст")) c.Text = "📄 Text";
-                    else if (c.Text.Contains("Картинки")) c.Text = "🖻 Images"; // Подставит правильную иконку 🖻
-                    else if (c.Text.Contains("Стереть всё")) c.Text = "🗑️ Clear all";
-                    else if (c.Text.Contains("Нужна помощь?")) c.Text = "Need help?\nPress F1";
-                }
-                else
-                {
-                    if (c.Text.Contains("All")) c.Text = "⚡ Всё";
-                    else if (c.Text.Contains("Text")) c.Text = "📄 Текст";
-                    else if (c.Text.Contains("Images")) c.Text = "🖻 Картинки"; // Подставит правильную иконку 🖻
-                    else if (c.Text.Contains("Clear all")) c.Text = "🗑️ Стереть всё";
-                    else if (c.Text.Contains("Need help?")) c.Text = "Нужна помощь?\nНажми F1";
+                    // Обрабатываем переносы строк \n, если они есть (например, в lblInfo)
+                    c.Text = translatedText.Replace("\\n", "\n");
                 }
 
-                if (c.HasChildren) TranslateControls(c);
+                // Рекурсия для вложенных элементов (панелей, групп)
+                if (c.HasChildren)
+                {
+                    TranslateControls(c);
+                }
             }
         }
 

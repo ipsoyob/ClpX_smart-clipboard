@@ -29,13 +29,22 @@ namespace Clpx
         private string currentTabFilter = "ALL";
 
         private readonly NotifyIcon trayIcon = new NotifyIcon();
-        private readonly ContextMenuStrip trayMenu = new ContextMenuStrip();
+        private Guna.UI2.WinForms.Guna2ContextMenuStrip trayMenu = new Guna.UI2.WinForms.Guna2ContextMenuStrip();
         private bool allowActualClose = false;
 
 
         // ТОЧЕЧНАЯ ЗАМЕНА В Form1.Variables.cs: Возвращаем словарь картинок
         private Dictionary<string, Image> safeThumbnails = new Dictionary<string, Image>();
 
+        private System.Threading.CancellationTokenSource filterCts;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        private static extern bool AddClipboardFormatListener(IntPtr hwnd);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        private static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
 
         private readonly Dictionary<string, string> customNames = new Dictionary<string, string>();
 
@@ -128,7 +137,6 @@ namespace Clpx
 
         private const int WM_HELP = 0x0053;
 
-        private int lastSavedWidth = 0;
         private static DateTime lastSavedTime = DateTime.MinValue;
 
 
