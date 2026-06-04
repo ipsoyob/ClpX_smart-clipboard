@@ -218,12 +218,36 @@
     <value>✍️ Interface and UX</value>
   </data>
   <data name="ui_DoubleClick" xml:space="preserve">
-    <value>Double-click card – instant return of data to clipboard.</value>
+    <value>•  Double-click card – instant return of data to clipboard.</value>
   </data>
   <data name="ui_RightClick" xml:space="preserve">
-    <value>Right-click (RMB) – context menu (Rename / Delete).</value>
+    <value>•  Right-click (RMB) – context menu (Rename / Delete).</value>
   </data>
   <data name="ui_Tabs" xml:space="preserve">
-    <value>Tabs at the top – history filtering (All / Text / Images).</value>
+    <value>•  Tabs at the top – history filtering (All / Text / Images).</value>
+  </data>
+  <data name="statusCopyErr" xml:space="preserve">
+    <value>Copy error</value>
+  </data>
+  <data name="previewError" xml:space="preserve">
+    <value>Download error</value>
+  </data>
+  <data name="imgMeta" xml:space="preserve">
+    <value>Screenshot #</value>
+  </data>
+  <data name="reference" xml:space="preserve">
+    <value>Help - ClpX Ultimate</value>
+  </data>
+  <data name="successF1" xml:space="preserve">
+    <value>Success</value>
+  </data>
+  <data name="signatureLbl" xml:space="preserve">
+    <value>Try pressing these combinations — the tiles will flash green</value>
+  </data>
+  <data name="fastPasteOn" xml:space="preserve">
+    <value>FAST PASTE: ON</value>
+  </data>
+  <data name="fastPasteOff" xml:space="preserve">
+    <value>FAST PASTE: OFF</value>
   </data>
 </root>

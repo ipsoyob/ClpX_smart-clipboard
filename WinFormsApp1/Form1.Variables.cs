@@ -9,7 +9,7 @@ using Microsoft.Win32;
 
 namespace Clpx
 {
-    public partial class Form1 : Form
+    public partial class Form1
     {
         private readonly ListView listClipboard = new ListView();
         private readonly Panel infoPanel = new Panel();
@@ -26,12 +26,30 @@ namespace Clpx
         private readonly Button btnTabTxt = new Button();
         private readonly Button btnTabImg = new Button();
 
+        private Button btnFastPaste;
+
+        private DateTime _lastHotkeyTime = DateTime.MinValue;
+        private readonly TimeSpan _hotkeyCooldown = TimeSpan.FromMilliseconds(400); // 400 мс задержки
+
+        private IntPtr lastActiveWindow = IntPtr.Zero;
+
+        private System.Windows.Forms.Timer selectionResetTimer;
+
+        private string currentLanguage;
+
         private string currentTabFilter = "ALL";
 
         private readonly NotifyIcon trayIcon = new NotifyIcon();
         private Guna.UI2.WinForms.Guna2ContextMenuStrip trayMenu = new Guna.UI2.WinForms.Guna2ContextMenuStrip();
         private bool allowActualClose = false;
 
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+        private const byte VK_CONTROL = 0x11;
+        private const byte VK_V = 0x56;
+        private const uint KEYEVENTF_KEYUP = 0x0002;
 
         // ТОЧЕЧНАЯ ЗАМЕНА В Form1.Variables.cs: Возвращаем словарь картинок
         private Dictionary<string, Image> safeThumbnails = new Dictionary<string, Image>();
@@ -60,7 +78,9 @@ namespace Clpx
         private ListViewItem hoveredItem = null;
         private int imageCounter = 0;
 
-        
+        private AppConfig appConfig;
+
+
         private bool isInitializing = true;
         private DateTime ignoreClipboardUntil = DateTime.MinValue;
 
@@ -68,7 +88,7 @@ namespace Clpx
 
 
         private readonly object clipboardLock = new object();
-        private Form previewForm = null;
+        private System.Windows.Forms.Form previewForm = null;
 
         private readonly string dataPath = Path.Combine(Application.StartupPath, "clpx_history.json");
         private readonly string mediaFolderPath = Path.Combine(Application.StartupPath, "media");
@@ -170,10 +190,9 @@ namespace Clpx
         [System.Runtime.InteropServices.DllImport("kernel32.dll")]
         public static extern uint GetCurrentThreadId();
 
+        private HelpForm activeHelpWindow = null;
 
-        private DateTime lastScreenshotTime = DateTime.MinValue;
-
-        private IntPtr nextClipboardViewer;
+        public static bool IgnoreOwnClipboardChanges = false;
 
         private void StopHighHzTimer()
         {
@@ -219,9 +238,9 @@ namespace Clpx
         private Panel pnlSearchHistory;
 
         private Button btnLangToggle;
-        private string currentLanguage = "RU";
         private string historyTitleText = "ИСТОРИЯ ПОИСКА";
         private bool isChangingLanguage = false;
+
 
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]

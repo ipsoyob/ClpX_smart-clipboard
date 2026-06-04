@@ -21,9 +21,17 @@ namespace Clpx
                 Directory.CreateDirectory(mediaFolderPath);
             }
 
+            appConfig = AppConfig.Load();
+            LanguageManager.SetLanguage(appConfig.Language.ToLower());
+
+
             SetAutorun();
             BuildMyInterface();
             EnableDoubleBuffer(listClipboard);
+
+            selectionResetTimer = new System.Windows.Forms.Timer();
+            selectionResetTimer.Interval = 2000; // 2 секунды задержки
+            selectionResetTimer.Tick += SelectionResetTimer_Tick;
 
             highHzCallback = new TimerCallback((id, msg, user, dw1, dw2) =>
             {
@@ -60,7 +68,6 @@ namespace Clpx
 
             });
 
-            nextClipboardViewer = SetClipboardViewer(this.Handle);
 
             string[] args = Environment.GetCommandLineArgs();
             bool shouldMinimize = false;
@@ -78,6 +85,20 @@ namespace Clpx
                 this.WindowState = FormWindowState.Minimized;
                 this.Load += (s, e) => { if (s != null) this.Hide(); };
             }
+            this.Shown += (s, e) =>
+            {
+                // 1. Силой вытаскиваем чекбокс на самый передний план
+                if (btnFastPaste != null)
+                {
+                    btnFastPaste.BringToFront();
+                }
+
+                // 2. Искусственно имитируем "шерудение" окна кодом.
+                // Для пользователя это займет 0 миллисекунд и будет незаметно,
+                // но для Windows это станет приказом перерисовать весь тёмный интерфейс!
+                this.Width += 1;
+                this.Width -= 1;
+            };
 
         }
 
@@ -344,9 +365,19 @@ namespace Clpx
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            RemoveClipboardFormatListener(this.Handle); // Обязательно отписываем форму при закрытии
+            // Если закрытие вызвано пользователем (крестик) И ИИ-флаг "allowActualClose" равен false
+            if (e.CloseReason == CloseReason.UserClosing && !allowActualClose)
+            {
+                e.Cancel = true; // Отменяем уничтожение формы
+                this.Hide();     // Просто прячем её в трей
+                return;
+            }
+
+            // Если же мы нажали "Закрыть полностью" в трее (allowActualClose стал true)
+            RemoveClipboardFormatListener(this.Handle); // Чистим за собой буфер Windows
             base.OnFormClosing(e);
         }
+
 
         protected override void WndProc(ref Message m)
         {
@@ -363,10 +394,22 @@ namespace Clpx
                     return;
 
                 case WM_HOTKEY:
+                    // БЛОКИРОВКА ДРЕБЕЗГА: Игнорируем спам-нажатия, если прошло меньше 400 мс
+                    if (DateTime.Now - _lastHotkeyTime < _hotkeyCooldown)
+                    {
+                        break;
+                    }
+                    _lastHotkeyTime = DateTime.Now; // Запоминаем время текущего успешного нажатия
+
                     int pressedHotkeyId = m.WParam.ToInt32();
 
                     if (pressedHotkeyId == HOTKEY_ID)
                     {
+                        if (GetForegroundWindow() != this.Handle)
+                        {
+                            lastActiveWindow = GetForegroundWindow();
+                        }
+
                         ShowAndActivateForm();
                     }
                     else if (pressedHotkeyId == HOTKEY_AUTHOR_ID)
@@ -395,13 +438,17 @@ namespace Clpx
                     // Асинхронное ожидание, чтобы тяжелые скриншоты/картинки успели прогрузиться в память буфера
                     System.Threading.Tasks.Task.Run(async () =>
                     {
-                        await System.Threading.Tasks.Task.Delay(1); // Микропауза 50 мс для завершения записи в Windows
+                        await System.Threading.Tasks.Task.Delay(50); // Микропауза 50 мс для завершения записи в Windows
 
-                        // Возвращаемся в главный UI-поток формы для безопасного обновления списка карточек
-                        this.BeginInvoke(new Action(() =>
+                        // ИСПРАВЛЕНИЕ: Проверяем, жива ли форма, перед вызовом BeginInvoke (предотвращает вылет при закрытии)
+                        if (!this.IsDisposed && this.IsHandleCreated)
                         {
-                            OnClipboardChangedNotification();
-                        }));
+                            // Возвращаемся в главный UI-поток формы для безопасного обновления списка карточек
+                            this.BeginInvoke(new Action(() =>
+                            {
+                                OnClipboardChangedNotification();
+                            }));
+                        }
                     });
                     break;
 
@@ -424,9 +471,12 @@ namespace Clpx
             {
                 return;
             }
+            if (IgnoreOwnClipboardChanges) return;
             if (isChangingLanguage) return;
             if (isInitializing) return;
             if (isProcessingClipboard) return;
+
+
 
             lock (clipboardLock)
             {
@@ -448,7 +498,7 @@ namespace Clpx
                                 string imgId = $"Screenshot {currentCount}";
                                 string metaInfo = $"📷 Скриншот ({bmp.Width}x{bmp.Height})";
 
-                                Image thumb = CreateHighQualityScale(bmp, 48, 48);
+                                Image thumb = CreateHighQualityScale(bmp, 60, 60);
                                 safeThumbnails[imgId] = thumb;
 
                                 string filename = $"Screenshot_{currentCount}.jpg";
@@ -720,9 +770,8 @@ namespace Clpx
                     }
 
                     // Перезаписываем текст заголовка красивым, ровным номером
-                    imgMeta = (currentLanguage == "EN")
-                        ? $"Screenshot #{imgNumber}"
-                        : $"Скриншот №{imgNumber}";
+                    string imgmeta_string = LanguageManager.GetString("imgMeta");
+                    imgMeta = imgmeta_string + imgNumber; 
                 }
 
                 string finalImgText = "🖼️ " + imgMeta;
@@ -824,10 +873,66 @@ namespace Clpx
                 }
                 catch
                 {
-                    statusLabel.Text = (currentLanguage == "EN") ? "  Copy error" : "  Ошибка копирования";
+                    statusLabel.Text = LanguageManager.GetString("statusCopyErr");
                     statusLabel.ForeColor = Color.FromArgb(239, 68, 68);
                 }
             }
+            this.Invoke(new Action(() =>
+            {
+                // Теперь читать appConfig и менять WindowState — на 100% безопасно!
+                if (appConfig != null && appConfig.FastPaste && lastActiveWindow != IntPtr.Zero)
+                {
+                    try
+                    {
+                        // 1. ЩИТ: Включаем игнорирование буфера, чтобы программа не зацикливалась сама на себе
+                        IgnoreOwnClipboardChanges = true;
+
+                        // 2. Сворачиваем наш менеджер и прячем в трей
+                        this.WindowState = FormWindowState.Minimized;
+                        this.Hide();
+
+                        System.Threading.Thread.Sleep(80);
+                        Application.DoEvents();
+
+                        // 3. Силой возвращаем фокус на предыдущую программу (например, Блокнот)
+                        SetForegroundWindow(lastActiveWindow);
+                        System.Threading.Thread.Sleep(150);
+
+                        // 4. Имитируем физическое нажатие Ctrl + V (передаем точные скан-коды Windows)
+                        keybd_event(VK_CONTROL, 0x1D, 0, UIntPtr.Zero); // Зажали Ctrl (скан-код 0x1D)
+                        keybd_event(VK_V, 0x2F, 0, UIntPtr.Zero);       // Нажали V (скан-код 0x2F)
+
+                        System.Threading.Thread.Sleep(50); // Пауза, чтобы Блокнот успел принять символы
+
+                        // 5. Отпускаем клавиши (Флаг 2 — это KEYEVENTF_KEYUP)
+                        keybd_event(VK_V, 0x2F, 2, UIntPtr.Zero);       // Отпустили V
+                        keybd_event(VK_CONTROL, 0x1D, 2, UIntPtr.Zero); // Отпустили Ctrl
+
+                        // Жесткая пауза для Windows, чтобы обновить состояние клавиатуры в системе
+                        System.Threading.Thread.Sleep(100);
+                    }
+                    catch (Exception ex)
+                    {
+                        if (statusLabel != null)
+                        {
+                            statusLabel.Text = "Ошибка драйвера: " + ex.Message;
+                            statusLabel.ForeColor = Color.FromArgb(239, 68, 68);
+                        }
+                    }
+                    finally
+                    {
+                        Task.Run(async () =>
+                    {
+                        await Task.Delay(500); // 500 миллисекунд паузы 
+
+                        // Возвращаем программу в режим обычного прослушивания
+                        IgnoreOwnClipboardChanges = false;
+                         lastActiveWindow = IntPtr.Zero;
+             });
+                    }
+                }
+
+            }));
         }
 
         private void ListClipboard_MouseClick(object sender, MouseEventArgs e)
@@ -984,7 +1089,7 @@ namespace Clpx
                             this.TopMost = false;
                             Image originalImg = Image.FromFile(imgPath);
 
-                            previewForm = new Form
+                            previewForm = new System.Windows.Forms.Form
                             {
                                 Text = "Кинотеатр ClpX",
                                 FormBorderStyle = FormBorderStyle.None,
@@ -1317,7 +1422,7 @@ namespace Clpx
                                         {
                                             using (Image fullImg = Image.FromStream(ms))
                                             {
-                                                Image thumb = CreateHighQualityScale(fullImg, 48, 48);
+                                                Image thumb = CreateHighQualityScale(fullImg, 60, 60);
                                                 lock (clipboardLock) { safeThumbnails[imgId] = thumb; }
                                             }
                                         }
@@ -1357,29 +1462,82 @@ namespace Clpx
 
         private Image CreateHighQualityScale(Image src, int maxWidth, int maxHeight)
         {
-            double ratioX = (double)maxWidth / src.Width;
-            double ratioY = (double)maxHeight / src.Height;
-            double ratio = Math.Min(ratioX, ratioY);
+            // 1. Задаем базовые размеры для холста
+            int newWidth = maxWidth;
+            int newHeight = maxHeight;
+            bool isImageValid = false;
 
-            int newWidth = (int)(src.Width * ratio);
-            int newHeight = (int)(src.Height * ratio);
-            if (newWidth < 1) newWidth = 1;
-            if (newHeight < 1) newHeight = 1;
+            // 2. Валидация: проверяем, что картинка существует и имеет физический размер
+            if (src != null && src.Width > 0 && src.Height > 0)
+            {
+                double ratioX = (double)maxWidth / src.Width;
+                double ratioY = (double)maxHeight / src.Height;
+                double ratio = Math.Min(ratioX, ratioY);
 
+                newWidth = (int)(src.Width * ratio);
+                newHeight = (int)(src.Height * ratio);
+
+                if (newWidth < 1) newWidth = 1;
+                if (newHeight < 1) newHeight = 1;
+
+                isImageValid = true;
+            }
+
+            // 3. Создаем холст под рассчитанные размеры
             Bitmap bmp = new Bitmap(newWidth, newHeight, PixelFormat.Format32bppRgb);
+
             using (Graphics g = Graphics.FromImage(bmp))
             {
-                g.CompositingMode = CompositingMode.SourceCopy;
+                g.CompositingMode = CompositingMode.SourceOver;
                 g.CompositingQuality = CompositingQuality.HighQuality;
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
                 g.SmoothingMode = SmoothingMode.HighQuality;
                 g.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
+                // Заливаем фон цветом твоего интерфейса
                 g.Clear(Color.FromArgb(24, 24, 35));
-                g.DrawImage(src, 0, 0, newWidth, newHeight);
+
+                if (isImageValid)
+                {
+                    try
+                    {
+                        g.DrawImage(src, 0, 0, newWidth, newHeight);
+
+                        if (src.Width <= 1 || src.Height <= 1)
+                        {
+                            isImageValid = false;
+                        }
+                    }
+                    catch
+                    {
+                        isImageValid = false;
+                    }
+                }
+
+                // Если картинка оказалась битой, мы помечаем этот Bitmap специальным тегом
+                if (!isImageValid)
+                {
+                    g.Clear(Color.FromArgb(24, 24, 35));
+                    g.CompositingMode = CompositingMode.SourceOver;
+
+                    // Ставим метку
+                    bmp.Tag = "ErrorPlaceholder";
+
+                    string previewError = LanguageManager.GetString("previewError");
+
+                    using (Font font = new Font("Segoe UI", 8, FontStyle.Regular))
+                    using (Brush brush = new SolidBrush(Color.FromArgb(150, 255, 100, 100)))
+                    using (StringFormat sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                    {
+                        g.DrawString(previewError, font, brush, new RectangleF(0, 0, newWidth, newHeight), sf);
+                    }
+                }
             }
+
             return bmp;
         }
+
+
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
@@ -1393,7 +1551,6 @@ namespace Clpx
             {
                 // Если закрытие вызвано из контекстного меню трея ("Полный выход"), чистим Win32 ресурсы
                 StopHighHzTimer();
-                ChangeClipboardChain(this.Handle, nextClipboardViewer);
                 UnregisterHotKey(this.Handle, HOTKEY_ID);
                 UnregisterHotKey(this.Handle, HOTKEY_AUTHOR_ID);
                 trayIcon.Dispose();
@@ -1406,197 +1563,35 @@ namespace Clpx
 
         private void ShowHelpDialog()
         {
-            // Проверяем выбранный язык программы (true, если выбран английский)
-            bool isEn = (currentLanguage == "EN");
-
-            // // 1. Инициализация и базовая кастомизация тёмной формы
-            Form helpForm = new Form();
-            helpForm.Text = isEn ? "ClipX Ultimate User Manual" : "Справка по использованию ClpX Ultimate";
-            helpForm.ClientSize = new Size(520, 520);
-            helpForm.StartPosition = FormStartPosition.CenterParent;
-            helpForm.FormBorderStyle = FormBorderStyle.None; // Полностью убирает верхнюю белую полосу (заголовок)
-            helpForm.MaximizeBox = false;
-            helpForm.MinimizeBox = false;
-            helpForm.BackColor = Color.FromArgb(26, 26, 30);
-            helpForm.ForeColor = Color.FromArgb(243, 244, 246);
-            helpForm.TopMost = true;
-
-            // // БЛОКИРОВКА ПЕРЕТАСКИВАНИЯ (WndProc через NativeWindow)
-            var dragBlocker = new DragBlockerNativeWindow();
-            helpForm.HandleCreated += (s, e) => dragBlocker.AssignHandle(helpForm.Handle);
-            helpForm.HandleDestroyed += (s, e) => dragBlocker.ReleaseHandle();
-
-            // // Включаем поддержку закрытия окна по кнопкам F1 и Escape
-            helpForm.KeyPreview = true;
-            helpForm.KeyDown += (s, e) => { if (e.KeyCode == Keys.F1 || e.KeyCode == Keys.Escape) helpForm.Close(); };
-
-            // // Стилизация шрифтов и палитры
-            Font fontTitle = new Font("Segoe UI", 11F, FontStyle.Bold);
-            Font fontSection = new Font("Segoe UI", 10F, FontStyle.Bold);
-            Font fontText = new Font("Segoe UI", 9.5F, FontStyle.Regular);
-            Font fontKbd = new Font("Consolas", 9F, FontStyle.Bold);
-
-            Color colorGrayText = Color.FromArgb(168, 165, 185);
-            Color colorAccent = Color.FromArgb(0, 238, 118);
-
-            int currentY = 24;
-
-            // // 2. ШАПКА ОКНА
-            Label lblHeader = new Label
+            // Если окно справки уже открыто и не уничтожено — просто выводим на передний план
+            if (activeHelpWindow != null && !activeHelpWindow.IsDisposed)
             {
-                Text = LanguageManager.GetString("lblHeader"),
-                Font = fontTitle,
-                ForeColor = colorGrayText,
-                Location = new Point(24, currentY),
-                AutoSize = true
-            };
-            helpForm.Controls.Add(lblHeader);
-
-            currentY += 44;
-
-            // // 3. БЛОК: ГОРЯЧИЕ КЛАВИШИ
-            Label lblSecHotkeys = new Label
-            {
-                Text = LanguageManager.GetString("lblSecHotkeys"),
-                Font = fontSection,
-                ForeColor = Color.White,
-                Location = new Point(24, currentY),
-                AutoSize = true
-            };
-            helpForm.Controls.Add(lblSecHotkeys);
-
-            currentY += 25;
-
-            // Двумерный массив с данными локализации горячих клавиш
-            string[,] hotkeysData = new string[,] {
-        { "Alt + X", LanguageManager.GetString("hk_QuickShow")},
-        { "Alt + A", LanguageManager.GetString("hk_Copyright")},
-        { "F1", LanguageManager.GetString("hk_Help")},
-        { "Delete",LanguageManager.GetString("hk_Delete")},
-        { "P", LanguageManager.GetString("hk_Preview")}};
-
-            for (int i = 0; i < hotkeysData.GetLength(0); i++)
-            {
-                string keys = hotkeysData[i, 0];
-                string desc = hotkeysData[i, 1];
-
-                Panel pnlKbd = new Panel
-                {
-                    Location = new Point(28, currentY),
-                    Size = new Size(105, 24),
-                    BackColor = Color.FromArgb(41, 41, 46),
-                    Padding = new Padding(1)
-                };
-
-                pnlKbd.Paint += (s, e) =>
-                {
-                    ControlPaint.DrawBorder(e.Graphics, pnlKbd.ClientRectangle,
-                        Color.FromArgb(62, 62, 70), ButtonBorderStyle.Solid);
-                };
-
-                Label lblKeys = new Label
-                {
-                    Text = keys,
-                    Font = fontKbd,
-                    ForeColor = Color.White,
-                    TextAlign = ContentAlignment.MiddleCenter,
-                    Dock = DockStyle.Fill
-                };
-
-                pnlKbd.Controls.Add(lblKeys);
-                helpForm.Controls.Add(pnlKbd);
-
-                Label lblDesc = new Label
-                {
-                    Text = desc,
-                    Font = fontText,
-                    ForeColor = colorGrayText,
-                    Location = new Point(148, currentY + 3),
-                    AutoSize = true
-                };
-                helpForm.Controls.Add(lblDesc);
-
-                currentY += 34;
+                activeHelpWindow.Activate();
+                return;
             }
 
-            currentY += 12;
+            // 1. ОТКЛЮЧАЕМ ГЛОБАЛЬНЫЕ ХОТКЕИ:
+            // Говорим Windows на время забыть про наши комбинации для главной формы.
+            // (Убедись, что HOTKEY_ID и HOTKEY_AUTHOR_ID называются именно так, как в твоем WndProc!)
+            UnregisterHotKey(this.Handle, HOTKEY_ID);
+            UnregisterHotKey(this.Handle, HOTKEY_AUTHOR_ID);
 
-            // // 4. БЛОК: ИНТЕРФЕЙС И UX
-            Label lblSecUi = new Label
+            // 2. Создаем и открываем окно справки
+            activeHelpWindow = new HelpForm();
+            activeHelpWindow.Owner = this;
+
+            // 3. ВОЗВРАЩАЕМ ХОТКЕИ НАЗАД при закрытии справки
+            activeHelpWindow.FormClosed += (s, e) =>
             {
-                Text = LanguageManager.GetString("lblSecUi"),
-                Font = fontSection,
-                ForeColor = Color.White,
-                Location = new Point(24, currentY),
-                AutoSize = true
+                // Когда пользователь нажимает "Отлично" или закрывает окно,
+                // мы заново регистрируем хоткеи в системе, чтобы они снова работали в фоне.
+                // 0x0001 — это системный код клавиши MOD_ALT (Alt)
+                RegisterHotKey(this.Handle, HOTKEY_ID, 0x0001, (int)Keys.X);
+                RegisterHotKey(this.Handle, HOTKEY_AUTHOR_ID, 0x0001, (int)Keys.A);
             };
-            helpForm.Controls.Add(lblSecUi);
 
-            currentY += 28;
-
-            string[] uiData = new string[]
-                {
-
-                LanguageManager.GetString("ui_DoubleClick"),
-                LanguageManager.GetString("ui_RightClick"),
-                LanguageManager.GetString("ui_Tabs")
-                };
-
-
-            foreach (string item in uiData)
-            {
-                Label lblBullet = new Label
-                {
-                    Text = "•",
-                    Font = new Font("Segoe UI", 12F, FontStyle.Bold),
-                    ForeColor = colorAccent,
-                    Location = new Point(28, currentY - 3),
-                    Size = new Size(15, 20)
-                };
-                helpForm.Controls.Add(lblBullet);
-
-                Label lblUiDesc = new Label
-                {
-                    Text = item,
-                    Font = fontText,
-                    ForeColor = colorGrayText,
-                    Location = new Point(48, currentY),
-                    AutoSize = true
-                };
-                helpForm.Controls.Add(lblUiDesc);
-
-                currentY += 28;
-            }
-
-            currentY += 12;
-
-
-            // // 6. КНОПКА ЗАКРЫТИЯ (ОК)
-            Button btnOk = new Button
-            {
-                Text = isEn ? "Excellent" : "Отлично",
-                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
-                Size = new Size(110, 36),
-                Location = new Point(386, helpForm.ClientSize.Height - 60),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = colorAccent,
-                ForeColor = Color.FromArgb(5, 5, 5),
-                Cursor = Cursors.Hand
-            };
-            btnOk.FlatAppearance.BorderSize = 0;
-
-            btnOk.MouseEnter += (s, e) => btnOk.BackColor = Color.FromArgb(0, 200, 83);
-            btnOk.MouseLeave += (s, e) => btnOk.BackColor = colorAccent;
-            btnOk.Click += (s, e) => helpForm.Close();
-
-            helpForm.Controls.Add(btnOk);
-
-            // Показываем созданное окно поверх основного
-            helpForm.ShowDialog();
+            activeHelpWindow.Show();
         }
-
-
-        // Вспомогательный класс для перехвата сообщений динамической формы.
 
         private class DragBlockerNativeWindow : NativeWindow
         {
@@ -1812,12 +1807,13 @@ namespace Clpx
         private void UpdateDynamicInterface()
         {
             // Получаем переводы из ресурсного файла по ключам
-            string searchPlaceholderRu = LanguageManager.GetString("txtSearch"); // всегда вернет RU версию, если мы временно переключим поток, но у нас логика зависит от текущего языка:
+            string searchPlaceholderRu = LanguageManager.GetString("txtSearch"); 
 
             // Чтобы не запутаться, достаем нужные строки для текущего языка:
             string historyTitle = LanguageManager.GetString("lblHistoryTitle");
             string placeholder = LanguageManager.GetString("txtSearch");
             string noResults = LanguageManager.GetString("lblNoResults");
+            string previewError = LanguageManager.GetString("previewError");
 
             btnTabAll.Text = LanguageManager.GetString("btnAll");
             btnTabTxt.Text = LanguageManager.GetString("btnText");
@@ -1847,12 +1843,71 @@ namespace Clpx
                 }
             }
 
+            // Обновляем текст на чекбоксе при смене языка
+            if (btnFastPaste != null && appConfig != null)
+            {
+                if (appConfig.FastPaste)
+                    btnFastPaste.Text = LanguageManager.GetString("fastPasteOn");
+                else
+                    btnFastPaste.Text = LanguageManager.GetString("fastPasteOff");
+            }
+
+
 
             // Записываем заголовок истории (переменная)
             historyTitleText = historyTitle;
+            if (safeThumbnails != null)
+            {
+                foreach (var key in safeThumbnails.Keys.ToList())
+                {
+                    Image thumb = safeThumbnails[key];
+
+                    if (thumb is Bitmap bmp && bmp.Tag?.ToString() == "ErrorPlaceholder")
+                    {
+                        int w = thumb.Width;
+                        int h = thumb.Height;
+
+                        thumb.Dispose(); // Удаляем старую графику
+
+                        // Генерируем новую заглушку с текстом на новом языке
+                        safeThumbnails[key] = CreateHighQualityScale(null, w, h);
+                    }
+                }
+            }
+
+            // Принудительно обновляем элементы списка на экране, чтобы они перерисовали картинки
+            this.Invalidate(true);
 
 
+            if (listClipboard != null)
+            {
+                listClipboard.Refresh();
+            }
+            appConfig.Language = System.Threading.Thread.CurrentThread.CurrentUICulture.TwoLetterISOLanguageName.ToUpper();
+
+            // Намертво сохраняем конфигурацию в файл config.json
+            appConfig.Save();
         }
+        private void SelectionResetTimer_Tick(object sender, EventArgs e)
+        {
+            selectionResetTimer.Stop(); // Останавливаем отсчет
+
+            if (listClipboard != null && listClipboard.SelectedItems.Count > 0)
+            {
+                listClipboard.SelectedItems.Clear(); // Убираем синее "загорание"
+            }
+        }
+
+        // Этот метод ловит момент клика по карточке
+        private void ListClipboard_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (listClipboard != null && listClipboard.SelectedItems.Count > 0)
+            {
+                selectionResetTimer.Stop();  // Сбрасываем таймер, если кликнули быстро по другой карточке
+                selectionResetTimer.Start(); // Запускаем 2 секунды заново
+            }
+        }
+
         private void BtnLangToggle_Click(object sender, EventArgs e)
         {
             if (isChangingLanguage) return;
@@ -1860,26 +1915,33 @@ namespace Clpx
 
             Button clickedButton = (Button)sender;
 
-            // 1. Меняем язык в менеджере и обновляем флаг текущего языка
-            if (currentLanguage == "RU")
+            // БАЗА: Проверяем язык по тексту на кнопке clickedButton.Text, он никогда не врет!
+            if (clickedButton.Text == "RU")
             {
                 LanguageManager.SetLanguage("en");
                 currentLanguage = "EN";
                 clickedButton.Text = "EN";
+
+                // Записываем английский в объект конфигурации
+                if (appConfig != null) appConfig.Language = "EN";
             }
             else
             {
                 LanguageManager.SetLanguage("ru");
                 currentLanguage = "RU";
                 clickedButton.Text = "RU";
+
+                // Записываем русский в объект конфигурации
+                if (appConfig != null) appConfig.Language = "RU";
             }
 
-            // 2. Вызываем метод из вашего LanguageManager. 
-            // Он автоматически переведет lblInfo, statusLabel и саму форму, 
-            // если их имена (Name) есть в файле ресурсов!
+            // Намертво сохраняем измененный язык в файл config.json
+            if (appConfig != null) appConfig.Save();
+
+            // 2. Вызываем метод из вашего LanguageManager
             LanguageManager.ApplyLocalization(this);
 
-            // 3. Переводим динамический текст, который зависит от условий
+            // 3. Переводим динамический текст
             UpdateDynamicInterface();
 
             // 4. Обновляем графику списка
@@ -1888,6 +1950,7 @@ namespace Clpx
 
             isChangingLanguage = false;
         }
+
 
 
 

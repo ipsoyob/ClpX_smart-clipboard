@@ -21,7 +21,7 @@ static class Program
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            Application.Run(new Form1());
+            Application.Run((System.Windows.Forms.Form)new Clpx.Form1());
 
             // Освобождаем ресурсы при штатном выходе из приложения
             mutex.ReleaseMutex();

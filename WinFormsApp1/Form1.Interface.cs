@@ -4,7 +4,7 @@ using System.Windows.Forms;
 
 namespace Clpx
 {
-    public partial class Form1 : Form
+    public partial class Form1
     {
         private void BuildMyInterface()
         {
@@ -122,7 +122,7 @@ namespace Clpx
             };
 
             btnLangToggle = new Button();
-            btnLangToggle.Text = "RU";
+            btnLangToggle.Text = appConfig.Language;
             btnLangToggle.Width = 40;
             btnLangToggle.Height = 30;
 
@@ -195,9 +195,6 @@ namespace Clpx
             // Возвращаем в контейнер инфо-панели!
             infoPanel.Controls.Add(pnlSearchHistory);
             pnlSearchHistory.BringToFront();
-
-
-
 
             // Привязываем нужные события
             txtSearch.Click += txtSearch_Click;
@@ -309,6 +306,7 @@ namespace Clpx
             listClipboard.DoubleClick += (s, e) => ListClipboard_DoubleClick(s, e);
             listClipboard.KeyDown += (s, e) => ListClipboard_KeyDown(s, e);
             listClipboard.MouseClick += (s, e) => ListClipboard_MouseClick(s, e);
+            listClipboard.SelectedIndexChanged += ListClipboard_SelectedIndexChanged;
 
             lblNoResults.AutoSize = false;
             lblNoResults.Size = new Size(300, 30);
@@ -330,6 +328,64 @@ namespace Clpx
                     listClipboard.Left + (listClipboard.Width - lblNoResults.Width) / 2,
                     listClipboard.Top + (listClipboard.Height - lblNoResults.Height) / 3
                 );
+
+                btnFastPaste = new Button
+                {
+                    Font = new Font("Segoe UI", 8, FontStyle.Bold),
+                    FlatStyle = FlatStyle.Flat,
+                    Cursor = Cursors.Hand,
+                    Size = new Size(160, btnLangToggle.Size.Height),
+
+                    // 2. МАНЕВР: Выравниваем кнопку по ПРАВОМУ краю кнопки EN, 
+                    // но растягиваем её влево, чтобы текст не обрезался рамкой окна!
+                    Location = new Point(btnLangToggle.Right - 113, btnLangToggle.Bottom + 8),
+
+                    // 3. Жестко привязываем к правому верхнему углу
+                    Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                    TextAlign = ContentAlignment.MiddleCenter
+                };
+                btnFastPaste.FlatAppearance.BorderSize = 0; // Полностью убираем уродские рамки Windows!
+
+                // МЕТОД ДИНАМИЧЕСКОГО ПЕРЕКРАШИВАНИЯ И СМЕНЫ ТЕКСТА
+                Action updateToggleStyle = () =>
+                {
+                    if (appConfig != null && appConfig.FastPaste)
+                    {
+                        // Состояние ВКЛ: горит твоим сочным неоновым зеленым
+                        btnFastPaste.BackColor = Color.FromArgb(0, 220, 110);
+                        btnFastPaste.ForeColor = Color.FromArgb(24, 24, 35); // Темный текст для контраста
+
+                        // Динамический текст в зависимости от языка (добавь ключи fastPasteOn / fastPasteOff)
+                        btnFastPaste.Text = LanguageManager.GetString("fastPasteOn");
+                    }
+                    else
+                    {
+                        // Состояние ВЫКЛ: плавно сливается с темным интерфейсом
+                        btnFastPaste.BackColor = Color.FromArgb(35, 35, 48); // Чуть светлее фона
+                        btnFastPaste.ForeColor = Color.FromArgb(150, 155, 170);
+                        btnFastPaste.Text = LanguageManager.GetString("fastPasteOff");
+                    }
+                };
+
+                // Загружаем начальное состояние из JSON при старте
+                updateToggleStyle();
+
+                // ОБРАБОТКА КЛИКА: Переключаем флаг, сохраняем в JSON и мгновенно меняем дизайн
+                btnFastPaste.Click += (s, e) =>
+                {
+                    if (appConfig != null)
+                    {
+                        appConfig.FastPaste = !appConfig.FastPaste; // Меняем true на false и наоборот
+                        appConfig.Save(); // Пишем в config.json
+                    }
+
+                    updateToggleStyle(); // Перерисовываем кнопку на лету
+                };
+
+                this.Controls.Add(btnFastPaste);
+                btnFastPaste.BringToFront();
+                // -----------------------------------------------------------------------
+
 
                 // 2. ИСПРАВЛЕНО: Принудительно растягиваем карточки и обновляем их графику
                 UpdateListViewLayout();
