@@ -8,7 +8,23 @@
 ---
 
 ## ✨ Основные фичи / Key Features
+### 🇷🇺 На русском:
+* **🎨 Стильный GUI-интерфейс:** Современная темная тема, созданная для удобства обычных пользователей. Интерфейс не перегружает глаза при долгой работе.
+* **📂 Умная сортировка:** Разделение истории на вкладки `Всё` (All), `Текст` (Text) и `Картинки` (Images) для моментального переключения.
+* **🧠 Распознавание типов данных:** Программа автоматически распознает, что вы скопировали — обычный текст, скриншот (с генерацией удобного превью) или исходный код (выделяется отдельной иконкой терминала).
+* **⚡ Быстрая вставка (Fast Paste):** Специальный переключаемый режим для мгновенной потоковой вставки нужного элемента в один клик.
+* **🔍 Мгновенный поиск:** Удобное поле поиска по названиям карточек и содержимому буфера для экономии вашего времени.
+* **🌐 Мультиязычность:** Полная поддержка русского (RU) и английского (EN) интерфейсов, переключаемая прямо в главном окне.
 
+---
+
+### 🇺🇸 In English:
+* **🎨 Sleek GUI Interface:** A modern dark theme designed for casual users and developers. Easy on the eyes during long working hours.
+* **📂 Smart Categorization:** Instantly filter your history using the `All`, `Text`, and `Images` tabs.
+* **🧠 Data Type Recognition:** Automatically detects what you copied — plain text, screenshots (with automatic thumbnail generation), or source code (marked with a distinctive terminal icon).
+* **⚡ Fast Paste Toggle:** A dedicated clipboard streaming mode for lightning-fast, one-click insertions.
+* **🔍 Instant Search:** Quickly find any item by its card name or content using the built-in search bar.
+* **🌐 Multi-language Support:** Full native support for Russian (RU) and English (EN) interfaces, switchable on the fly.
 # 🛠️ Установка и запуск / Installation & Usage
 
 ### 🇷🇺 На русском:
@@ -78,20 +94,54 @@
 ## 🖥️ Скриншоты интерфейса / Interface Screenshots
 
 <p align="center">
-  <img src="screenshot_main.png" alt="🇷🇺 Главное окно / 🇺🇸 Main Window" width="450">
-  <img src="screenshot_help.png" alt="🇷🇺 Меню справки / 🇺🇸 Help Menu" width="450">
+  <img src="screenshot_main.png" width="450">
 </p>
 <p align="center">
-  <img src="screenshot_clear_prompt.png" alt="🇷🇺 Подтверждение очистки / 🇺🇸 Clear Confirmation" width="450">
-  <img src="screenshot_clear_success.png" alt="🇷🇺 Успешная очистка / 🇺🇸 Clear Success" width="450">
+  <strong>🇷🇺 Главное окно / 🇺🇸 Main Window</strong>
+</p>
+
+<br>
+
+<p align="center">
+  <img src="screenshot_help.png" width="450">
 </p>
 <p align="center">
-  <img src="screenshot_smartscreen.png" alt="🇷🇺 Предупреждение SmartScreen / 🇺🇸 SmartScreen Warning" width="450">
-  <img src="screenshot_setup.png" alt="🇷🇺 Окно установки / 🇺🇸 Installer Window" width="500">
+  <strong>🇷🇺 Меню справки / 🇺🇸 Help Menu</strong>
 </p>
 
----
+<br>
 
+<p align="center">
+  <img src="screenshot_clear_prompt.png" width="450">
+</p>
+<p align="center">
+  <strong>🇷🇺 Подтверждение очистки / 🇺🇸 Clear Confirmation</strong>
+</p>
+
+<br>
+
+<p align="center">
+  <img src="screenshot_clear_success.png" width="450">
+</p>
+<p align="center">
+  <strong>🇷🇺 Успешная очистка / 🇺🇸 Clear Success</strong>
+</p>
+
+<br>
+
+<p align="center">
+  <img src="screenshot_setup.png" width="450">
+</p>
+<p align="center">
+  <strong>🇷🇺 Окно установки / 🇺🇸 Installer Window</strong>
+</p>
+
+<p align="center">
+  <img src="screenshot_smartscreen.png" width="450">
+</p>
+<p align="center">
+  <strong>🇷🇺 Предупреждение SmartScreen / 🇺🇸 SmartScreen Warning</strong>
+</p>
 ---
 
 ## 🛠️ Установка и запуск / Installation & Usage
@@ -112,6 +162,6 @@
 
 ## 🧑‍💻 Разработчик / Creator
 
-Made with ❤️ by **[@ipsoyob](https://github.com)**  
+Made with ❤️ by **[@ipsoyob](https://github.com)**  and @kl0pka
 * 🇷🇺 Если вам понравился проект и он оказался полезным, не забудьте поставить **Star ⭐** этому репозиторию!
 * 🇺🇸 If you like this project and find it useful, please consider giving it a **Star ⭐**!
